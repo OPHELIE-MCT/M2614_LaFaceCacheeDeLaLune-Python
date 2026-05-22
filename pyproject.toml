@@ -1,0 +1,12 @@
+[project]
+name = "M2614_LaFaceCacheeDeLaLune"
+version = "0.1.0"
+description = "M2614 - Python project"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "msgpack>=1.1.2",
+    "numpy>=2.4.6",
+    "requests>=2.34.2",
+    "watchdog>=6.0.0",
+]
