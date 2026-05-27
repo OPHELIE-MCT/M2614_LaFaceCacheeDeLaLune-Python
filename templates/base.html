@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }} | M2614 Dashboard</title>
+    <link rel="stylesheet" href="{{ request.url_for('static', path='vendor/bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ request.url_for('static', path='css/dashboard.css') }}">
+</head>
+<body data-page="{{ active_page }}">
+    <nav class="navbar navbar-expand-lg sticky-top dashboard-navbar border-bottom border-body-tertiary">
+        <div class="container-fluid px-3 px-lg-4">
+            <a class="navbar-brand d-flex align-items-center gap-3" href="/monitoring">
+                <span class="brand-mark">M</span>
+                <span>
+                    <span class="d-block fw-semibold">M2614 Mission Console</span>
+                    <span class="d-block small text-body-secondary">Monitoring and control template</span>
+                </span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNavbar">
+                <ul class="navbar-nav me-auto mb-3 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link {% if active_page == 'monitoring' %}active{% endif %}" href="/monitoring">Monitoring</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if active_page == 'control' %}active{% endif %}" href="/control">Control</a>
+                    </li>
+                </ul>
+
+                <div class="d-none d-lg-flex align-items-center gap-2 ms-auto navbar-utility-group">
+                    <div class="metric-pill">
+                        <span class="metric-label">CPU</span>
+                        <span class="metric-value" data-system-metric="cpu">{{ dashboard.system.cpu_percent }}%</span>
+                    </div>
+                    <div class="metric-pill">
+                        <span class="metric-label">RAM</span>
+                        <span class="metric-value" data-system-metric="ram">{{ dashboard.system.ram_percent }}%</span>
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm theme-toggle" data-theme-toggle>
+                        <span class="theme-toggle-icon" data-theme-icon></span>
+                        <span data-theme-label>Dark theme</span>
+                    </button>
+                </div>
+
+                <div class="d-lg-none border-top border-body-tertiary mt-3 pt-3">
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <div class="metric-pill flex-grow-1">
+                            <span class="metric-label">CPU</span>
+                            <span class="metric-value" data-system-metric="cpu">{{ dashboard.system.cpu_percent }}%</span>
+                        </div>
+                        <div class="metric-pill flex-grow-1">
+                            <span class="metric-label">RAM</span>
+                            <span class="metric-value" data-system-metric="ram">{{ dashboard.system.ram_percent }}%</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary w-100 theme-toggle" data-theme-toggle>
+                        <span class="theme-toggle-icon" data-theme-icon></span>
+                        <span data-theme-label>Dark theme</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container-fluid px-3 px-lg-4 py-4 py-xl-5">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="dashboardToast" class="toast align-items-center text-bg-dark border-0" role="status" aria-live="polite" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">Action completed.</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ request.url_for('static', path='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ request.url_for('static', path='js/dashboard.js') }}"></script>
+</body>
+</html>

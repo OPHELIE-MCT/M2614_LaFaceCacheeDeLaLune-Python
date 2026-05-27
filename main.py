@@ -1,16 +1,15 @@
-# from bridge import Bridge # Is used for communication between the MPU and the MCU
-# TODO: Use uvicorn later for faster webserver
+import os
 
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import uvicorn
 
-
-class App(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"Hello")
+from app import create_app
 
 
-server = HTTPServer(("0.0.0.0", 8000), App)
-server.serve_forever()
+HOST = os.getenv("M2614_HOST", "0.0.0.0")
+PORT = int(os.getenv("M2614_PORT", "8000"))
+
+app = create_app()
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host=HOST, port=PORT)

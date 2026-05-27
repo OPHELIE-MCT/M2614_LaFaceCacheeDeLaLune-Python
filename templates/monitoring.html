@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card card-shell mission-hero border-0 overflow-hidden mb-4">
+    <div class="card-body p-4 p-xl-5">
+        <div class="row g-4 align-items-center">
+            <div class="col-xl-8">
+                <span class="badge rounded-pill text-bg-warning mb-3">Placeholder telemetry surface</span>
+                <h1 class="display-6 mb-3">Grid-based monitoring for the sorter, robot state, and LiDAR map.</h1>
+                <p class="lead text-body-secondary mb-0">
+                    This template is ready for Bridge-backed telemetry later. For now it exposes placeholder sorter metrics,
+                    robot state signals, and a dedicated canvas reserved for the future 2D LiDAR live map.
+                </p>
+            </div>
+            <div class="col-xl-4">
+                <div class="card border-0 hero-status-card">
+                    <div class="card-body">
+                        <p class="text-uppercase small fw-semibold text-body-secondary mb-2">Current mode</p>
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                            <span class="badge rounded-pill {{ dashboard.robot.current_mode.badge_class }}" data-field="robot-mode-badge">{{ dashboard.robot.current_mode.label }}</span>
+                            <span class="small text-body-secondary">{{ dashboard.meta.updated_at }}</span>
+                        </div>
+                        <p class="mb-2 fw-semibold" data-field="robot-status-note">{{ dashboard.robot.status_note }}</p>
+                        <p class="mb-0 text-body-secondary" data-field="last-action">{{ dashboard.meta.last_action }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4 mb-4">
+    <div class="col-12 col-xl-4">
+        <div class="card card-shell h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">Sorting system</span>
+                <span class="badge text-bg-light">Live placeholder</span>
+            </div>
+            <div class="card-body">
+                <p class="section-kicker mb-2">Ball count</p>
+                <div class="display-4 fw-semibold mb-1" data-field="ball-count">{{ dashboard.sorter.ball_count }}</div>
+                <p class="text-body-secondary mb-4">Balls currently staged in the sorter feed.</p>
+
+                <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                    <div>
+                        <p class="section-kicker mb-1">Current ball</p>
+                        <span class="badge rounded-pill {{ dashboard.sorter.current_ball.badge_class }}" data-field="ball-color">{{ dashboard.sorter.current_ball.label }}</span>
+                    </div>
+                    <div class="text-end">
+                        <p class="section-kicker mb-1">Confidence</p>
+                        <span class="fw-semibold" data-field="ball-confidence">{{ dashboard.sorter.current_ball.confidence }}%</span>
+                    </div>
+                </div>
+
+                <div class="progress confidence-progress mb-3" role="progressbar" aria-label="Current ball confidence" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar {{ dashboard.sorter.current_ball.progress_class }}" data-field="ball-confidence-bar" style="width: {{ dashboard.sorter.current_ball.confidence }}%;">
+                        {{ dashboard.sorter.current_ball.confidence }}%
+                    </div>
+                </div>
+
+                <div class="alert alert-secondary mb-0">
+                    <strong>Sorting state:</strong>
+                    <span data-field="sorting-status-text">{% if dashboard.sorter.enabled %}Armed{% else %}Standby{% endif %}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-4">
+        <div class="card card-shell h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">Robot state</span>
+                <span class="badge rounded-pill {{ dashboard.robot.current_mode.badge_class }}" data-field="robot-mode-chip">{{ dashboard.robot.current_mode.label }}</span>
+            </div>
+            <div class="card-body">
+                <p class="mb-3 text-body-secondary" data-field="robot-summary">{{ dashboard.robot.summary }}</p>
+                <div class="list-group list-group-flush dashboard-list" data-robot-flags>
+                    {% for flag in dashboard.robot.flags %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span>{{ flag.label }}</span>
+                        <span class="badge rounded-pill {{ flag.badge_class }}" data-flag="{{ flag.key }}">{{ flag.state_label }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-4">
+        <div class="card card-shell h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">Recent activity</span>
+                <span class="badge text-bg-dark">Template log</span>
+            </div>
+            <div class="card-body py-0">
+                <div class="list-group list-group-flush dashboard-list" data-event-log>
+                    {% for event in dashboard.events %}
+                    <div class="list-group-item px-0 py-3">
+                        <div class="d-flex justify-content-between align-items-start gap-3">
+                            <div>
+                                <p class="mb-1 fw-semibold">{{ event.message }}</p>
+                                <p class="mb-0 small text-body-secondary">{{ event.timestamp }}</p>
+                            </div>
+                            <span class="badge rounded-pill {{ event.badge_class }}">Event</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4">
+    <div class="col-12">
+        <div class="card card-shell lidar-card overflow-hidden">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <span class="fw-semibold">LiDAR 2D live map</span>
+                    <p class="mb-0 small text-body-secondary">Reserved canvas for the future scan renderer.</p>
+                </div>
+                <span class="badge text-bg-secondary">Canvas placeholder</span>
+            </div>
+            <div class="card-body">
+                <div class="lidar-shell">
+                    <canvas id="lidarCanvas" aria-label="LiDAR placeholder canvas"></canvas>
+                    <div class="canvas-caption">
+                        <p class="h5 mb-2">LiDAR canvas placeholder</p>
+                        <p class="mb-0 text-body-secondary">The live 2D map will be drawn here when scan streaming is wired in.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer border-0 pt-0">
+                <div class="row g-3 text-center">
+                    <div class="col-12 col-md-4">
+                        <div class="lidar-metric">
+                            <span class="metric-label">Last scan</span>
+                            <span class="metric-value" data-field="lidar-scan-id">{{ dashboard.lidar.scan_id }}</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="lidar-metric">
+                            <span class="metric-label">Frequency</span>
+                            <span class="metric-value" data-field="lidar-frequency">{{ dashboard.lidar.frequency_hz }} Hz</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="lidar-metric">
+                            <span class="metric-label">Status</span>
+                            <span class="metric-value" data-field="lidar-status-text">{{ dashboard.lidar.message }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
