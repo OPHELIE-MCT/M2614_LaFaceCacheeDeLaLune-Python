@@ -48,7 +48,7 @@
         });
 
         document.querySelectorAll("[data-color-select]").forEach((select) => {
-            if (!payload.capture_active && payload.selected_color) {
+            if (payload.capture_active && payload.selected_color) {
                 select.value = payload.selected_color;
             }
         });
