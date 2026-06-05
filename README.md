@@ -1,28 +1,27 @@
-# M2614 La face cachée de la Lune
+# M2614 La Face Cachee De La Lune Python
 
-Repo du code Python tournant sur la Arduino Uno Q
+Python application repository for the Uno Q SBC side of the M2614 project.
 
-## Dashboard web
+## What lives here
 
-Le projet contient maintenant un dashboard web placeholder lance par uvicorn via `uv run main.py`.
+- the FastAPI web app used on the `ball-data-gather` branch to control color-sensor capture sessions
+- the local RouterBridge client implementation in `bridge.py`
+- the CSV capture flow that stores labeled AS7341 samples for later analysis in `ball-analyzer`
 
-### Lancement local
+## Run locally
 
 ```powershell
 uv sync
 uv run main.py
 ```
 
-Par defaut, le serveur ecoute sur `0.0.0.0:8000`.
-Vous pouvez changer le port avec la variable d'environnement `M2614_PORT`.
+The app listens on `0.0.0.0:8000` by default. The output CSV is written to `data/color_sensor_samples.csv`.
 
-### Pages disponibles
+## Capture workflow
 
-- `/monitoring` : supervision du robot, du systeme de tri et zone reservee pour la carte LiDAR 2D
-- `/control` : commandes placeholder pour les sequences de calibration, la selection du mode robot et le forcage du tri
+- choose the current ball color in the web UI
+- start a capture session
+- receive `color_sensor.sample` notifications from the Uno Q sketch through RouterBridge
+- stop automatically after 100 saved samples
 
-### Etat actuel
-
-- l'interface utilise Bootstrap 5.3 en assets locaux, sans dependance CDN
-- les donnees robot, trieur et LiDAR sont encore des placeholders partages en memoire
-- les boutons de calibration, le changement de mode et le forcage du tri appellent deja des endpoints backend prepares pour une future integration avec `bridge.py`
+This repo is meant to be used together with the Arduino repo for capture and the `ball-analyzer` repo for recalculating classifier centroids.

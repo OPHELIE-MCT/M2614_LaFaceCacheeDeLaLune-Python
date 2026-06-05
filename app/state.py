@@ -1,333 +1,250 @@
 from __future__ import annotations
 
+import csv
 from datetime import UTC, datetime
-from threading import RLock
-from typing import cast
+from pathlib import Path
+from threading import RLock, Thread
 
-import psutil
+from bridge import Bridge
+from logger import Logger
 
 from .config import (
-    BALL_STYLES,
-    CALIBRATION_OPTIONS,
-    ROBOT_MODES,
-    CalibrationOption,
-    RobotMode,
+    BRIDGE_SAMPLE_METHOD,
+    BRIDGE_SENSOR_READY_METHOD,
+    BRIDGE_START_METHOD,
+    BRIDGE_STOP_METHOD,
+    CAPTURE_COLORS,
+    CAPTURE_TARGET_SAMPLES,
+    COLOR_BADGES,
+    DATA_DIR,
+    DATA_FILE,
 )
 
 
-class PlaceholderStore:
-    """Hold the shared in-memory placeholder state for the dashboard.
+logger = Logger("CaptureStore")
 
-    The store centralizes the fake monitoring data and interactive control state
-    used by the current Bootstrap dashboard until real hardware telemetry and
-    commands are wired in through the bridge layer.
-    """
+
+class CaptureStore:
+    """Hold the shared state for the color-sensor calibration capture app."""
 
     def __init__(self) -> None:
-        """Initialize the placeholder dashboard state.
-
-        The initial state mirrors a robot in standby, primes the CPU usage probe
-        so subsequent readings are meaningful, and records the first activity log
-        entry displayed by the frontend.
-        """
         self._lock = RLock()
-        self.mode = "standby"
-        self.sorting_forced = False
-        self.ball_count = 18
-        self.current_ball_color = "Blue"
-        self.current_ball_confidence = 91
-        self.lidar_scan_id = 0
-        self.lidar_frequency_hz = 0.0
-        self.last_action = "Dashboard template initialized."
-        self.last_calibration = "None"
-        self.updated_at = self._timestamp_label()
-        self.events: list[dict[str, str]] = []
+        self._csv_lock = RLock()
+        self._data_file = DATA_FILE
+        self._capture_active = False
+        self._selected_color: str | None = None
+        self._sample_count = 0
+        self._target_samples = CAPTURE_TARGET_SAMPLES
+        self._last_sample: list[int] = []
+        self._status_message = "Waiting for the bridge registration to complete."
+        self._updated_at = self._timestamp_label()
+        self._bridge_connected = False
+        self._bridge_last_error: str | None = None
+        self._sensor_ready = False
 
-        psutil.cpu_percent(interval=None)
-        self._log_event(self.last_action, "text-bg-secondary")
+        bridge_thread = Thread(
+            target=self._register_bridge_handler,
+            name="BridgeRegister",
+            daemon=True,
+        )
+        bridge_thread.start()
 
-    def dashboard_payload(self) -> dict[str, object]:
-        """Assemble the complete placeholder payload used by the dashboard UI.
-
-        Returns:
-            dict[str, object]: A structured snapshot containing system metrics,
-            sorter information, robot state, LiDAR placeholder data, available
-            modes, calibration actions, activity events, and metadata.
-        """
+    def status_payload(self) -> dict[str, object]:
         with self._lock:
-            current_mode = self._mode_by_key(self.mode)
-            current_ball = self._current_ball_payload()
-            robot = self._robot_payload(current_mode)
+            current_color = self._selected_color
             payload: dict[str, object] = {
-                "system": self.system_metrics(),
-                "sorter": {
-                    "ball_count": self.ball_count,
-                    "enabled": self.sorting_forced or self.mode in {"sorting", "unloading"},
-                    "current_ball": current_ball,
-                    "status_note": "Placeholder classifier output ready for Bridge-backed telemetry later.",
-                },
-                "robot": robot,
-                "lidar": {
-                    "placeholder": True,
-                    "scan_id": self.lidar_scan_id,
-                    "frequency_hz": self.lidar_frequency_hz,
-                    "point_count": 0,
-                    "message": "Canvas reserved for the future 2D LiDAR live map.",
-                },
-                "modes": [self._mode_view(mode) for mode in ROBOT_MODES],
-                "calibrations": [self._calibration_view(option) for option in CALIBRATION_OPTIONS],
-                "events": list(self.events),
-                "meta": {
-                    "last_action": self.last_action,
-                    "last_calibration": self.last_calibration,
-                    "updated_at": self.updated_at,
-                },
+                "available_colors": list(CAPTURE_COLORS),
+                "selected_color": current_color,
+                "selected_color_badge": self._badge_for_color(current_color),
+                "capture_active": self._capture_active,
+                "sample_count": self._sample_count,
+                "target_samples": self._target_samples,
+                "last_sample": list(self._last_sample),
+                "csv_path": str(self._data_file),
+                "status_message": self._status_message,
+                "bridge_connected": self._bridge_connected,
+                "bridge_error": self._bridge_last_error,
+                "sensor_ready": self._sensor_ready,
+                "updated_at": self._updated_at,
             }
             return payload
 
-    def system_metrics(self) -> dict[str, float]:
-        """Read the current host CPU and RAM usage.
-
-        Returns:
-            dict[str, float]: CPU and memory usage percentages for the machine
-            running the dashboard service.
-        """
+    def health_payload(self) -> dict[str, object]:
+        status = self.status_payload()
         return {
-            "cpu_percent": round(psutil.cpu_percent(interval=None), 1),
-            "ram_percent": round(psutil.virtual_memory().percent, 1),
+            "status": "ok",
+            "bridge_connected": status["bridge_connected"],
+            "capture_active": status["capture_active"],
+            "sensor_ready": status["sensor_ready"],
         }
 
-    def lidar_status(self) -> dict[str, object]:
-        """Return the LiDAR-specific subset of the dashboard payload.
+    def start_gathering(self, color_name: str) -> dict[str, object]:
+        normalized_color = color_name.strip().lower()
+        if normalized_color not in CAPTURE_COLORS:
+            raise ValueError(f"Unsupported color '{color_name}'.")
 
-        Returns:
-            dict[str, object]: The placeholder LiDAR panel data consumed by the
-            monitoring page and the dedicated API endpoint.
-        """
-        payload = self.dashboard_payload()
-        return cast(dict[str, object], payload["lidar"])
-
-    def modes_payload(self) -> list[dict[str, object]]:
-        """Return the available robot modes with their active flag.
-
-        Returns:
-            list[dict[str, object]]: All configured modes in a frontend-friendly
-            structure suitable for rendering selectors and API payloads.
-        """
         with self._lock:
-            return [self._mode_view(mode) for mode in ROBOT_MODES]
-
-    def set_mode(self, mode_key: str) -> dict[str, object]:
-        """Switch the placeholder robot state machine to a new mode.
-
-        Args:
-            mode_key: Key of the target robot mode.
-
-        Returns:
-            dict[str, object]: The refreshed dashboard payload after the mode
-            change has been applied.
-
-        Raises:
-            ValueError: Raised when ``mode_key`` does not match any configured
-            robot mode.
-        """
-        with self._lock:
-            selected_mode = self._mode_by_key(mode_key)
-            self.mode = selected_mode.key
-            if selected_mode.key == "emergency":
-                self.sorting_forced = False
-            self.last_action = f"Robot mode switched to {selected_mode.label}."
-            self.updated_at = self._timestamp_label()
-            self._log_event(
-                self.last_action,
-                "text-bg-danger" if selected_mode.key == "emergency" else "text-bg-primary",
-            )
-            return self.dashboard_payload()
-
-    def set_sorting_enabled(self, enabled: bool) -> dict[str, object]:
-        """Enable or disable the manual sorting override.
-
-        Args:
-            enabled: ``True`` to force-enable the sorting system, ``False`` to
-            release the manual override.
-
-        Returns:
-            dict[str, object]: The refreshed dashboard payload after the sorting
-            override state changes.
-
-        Raises:
-            ValueError: Raised when forced sorting is requested while the robot is
-            in emergency mode.
-        """
-        with self._lock:
-            if self.mode == "emergency" and enabled:
+            if self._capture_active:
+                raise ValueError("A gathering session is already running.")
+            if not self._bridge_connected:
                 raise ValueError(
-                    "Forced sorting is blocked while emergency mode is active.")
+                    "Bridge is not connected to the Uno Q router yet.")
 
-            self.sorting_forced = enabled
-            self.last_action = (
-                "Manual sorting override enabled."
-                if enabled
-                else "Manual sorting override disabled."
-            )
-            self.updated_at = self._timestamp_label()
-            self._log_event(
-                self.last_action,
-                "text-bg-success" if enabled else "text-bg-secondary",
-            )
-            return self.dashboard_payload()
+        self._ensure_csv_header()
+        self._refresh_sensor_ready()
 
-    def run_calibration(self, calibration_key: str) -> dict[str, object]:
-        """Queue a placeholder calibration sequence.
+        if not self._sensor_ready:
+            raise ValueError("The color sensor is not ready on the Uno Q.")
 
-        Args:
-            calibration_key: Key identifying which calibration routine should be
-            marked as queued.
+        self._call_bridge(BRIDGE_START_METHOD)
 
-        Returns:
-            dict[str, object]: The refreshed dashboard payload after the
-            calibration event has been recorded.
-
-        Raises:
-            ValueError: Raised when ``calibration_key`` does not match any known
-            calibration option.
-        """
         with self._lock:
-            calibration = self._calibration_by_key(calibration_key)
-            self.last_calibration = calibration.label
-            self.last_action = f"{calibration.label} calibration queued in placeholder mode."
-            self.updated_at = self._timestamp_label()
-            self._log_event(self.last_action, "text-bg-warning")
-            return self.dashboard_payload()
+            self._selected_color = normalized_color
+            self._capture_active = True
+            self._sample_count = 0
+            self._last_sample = []
+            self._status_message = f"Gathering {normalized_color} samples (0/{self._target_samples})."
+            self._updated_at = self._timestamp_label()
+            return self.status_payload()
 
-    def _current_ball_payload(self) -> dict[str, object]:
-        style = BALL_STYLES.get(self.current_ball_color,
-                                BALL_STYLES["Unknown"])
-        return {
-            "label": self.current_ball_color,
-            "confidence": self.current_ball_confidence,
-            "badge_class": style["badge_class"],
-            "progress_class": style["progress_class"],
-        }
+    def stop_gathering(self) -> dict[str, object]:
+        with self._lock:
+            was_active = self._capture_active
+            if not was_active:
+                raise ValueError("No gathering session is currently active.")
 
-    def _robot_payload(self, current_mode: RobotMode) -> dict[str, object]:
-        flags = [
-            self._flag_view(
-                key="autonomous",
-                label="Autonomous",
-                active=self.mode in {"autonomous", "sorting", "unloading"},
-                active_label="Engaged",
-                inactive_label="Idle",
-                active_class="text-bg-success",
-                inactive_class="text-bg-secondary",
-            ),
-            self._flag_view(
-                key="waiting",
-                label="Waiting",
-                active=self.mode == "standby",
-                active_label="Awaiting command",
-                inactive_label="Executing",
-                active_class="text-bg-warning",
-                inactive_class="text-bg-success",
-            ),
-            self._flag_view(
-                key="emergency",
-                label="Emergency stop",
-                active=self.mode == "emergency",
-                active_label="Triggered",
-                inactive_label="Clear",
-                active_class="text-bg-danger",
-                inactive_class="text-bg-success",
-            ),
-            self._flag_view(
-                key="sorting-system",
-                label="Sorting system",
-                active=self.sorting_forced or self.mode in {
-                    "sorting", "unloading"},
-                active_label="Armed",
-                inactive_label="Standby",
-                active_class="text-bg-info",
-                inactive_class="text-bg-secondary",
-            ),
-            self._flag_view(
-                key="rc-link",
-                label="RC receiver",
-                active=self.mode == "remote-control",
-                active_label="Operator linked",
-                inactive_label="Passive",
-                active_class="text-bg-primary",
-                inactive_class="text-bg-secondary",
-            ),
-        ]
+        self._call_bridge(BRIDGE_STOP_METHOD)
 
-        return {
-            "current_mode": {
-                "key": current_mode.key,
-                "label": current_mode.label,
-                "badge_class": current_mode.badge_class,
-            },
-            "status_note": current_mode.status_note,
-            "flags": flags,
-            "sorting_forced": self.sorting_forced,
-            "summary": "Placeholder robot state machine surface ready for real modes later.",
-        }
+        with self._lock:
+            self._capture_active = False
+            self._status_message = "Gathering stopped by the operator."
+            self._updated_at = self._timestamp_label()
+            return self.status_payload()
 
-    def _flag_view(
-        self,
-        *,
-        key: str,
-        label: str,
-        active: bool,
-        active_label: str,
-        inactive_label: str,
-        active_class: str,
-        inactive_class: str,
-    ) -> dict[str, str]:
-        return {
-            "key": key,
-            "label": label,
-            "state_label": active_label if active else inactive_label,
-            "badge_class": active_class if active else inactive_class,
-        }
+    def handle_color_sample(self, *channels: int) -> None:
+        if len(channels) != 10:
+            self._set_bridge_error(
+                f"Received {len(channels)} channels, expected 10 from {BRIDGE_SAMPLE_METHOD}."
+            )
+            return
 
-    def _mode_view(self, mode: RobotMode) -> dict[str, object]:
-        return {
-            "key": mode.key,
-            "label": mode.label,
-            "description": mode.description,
-            "badge_class": mode.badge_class,
-            "is_active": mode.key == self.mode,
-        }
+        try:
+            sample = [int(channel) for channel in channels]
+        except (TypeError, ValueError) as error:
+            self._set_bridge_error(f"Invalid sample payload: {error}")
+            return
 
-    def _calibration_view(self, calibration: CalibrationOption) -> dict[str, str]:
-        return {
-            "key": calibration.key,
-            "label": calibration.label,
-            "description": calibration.description,
-        }
+        with self._lock:
+            if not self._capture_active or self._selected_color is None:
+                return
 
-    def _mode_by_key(self, mode_key: str) -> RobotMode:
-        for mode in ROBOT_MODES:
-            if mode.key == mode_key:
-                return mode
-        raise ValueError(f"Unknown robot mode: {mode_key}")
+            color_name = self._selected_color
 
-    def _calibration_by_key(self, calibration_key: str) -> CalibrationOption:
-        for calibration in CALIBRATION_OPTIONS:
-            if calibration.key == calibration_key:
-                return calibration
-        raise ValueError(f"Unknown calibration sequence: {calibration_key}")
+        self._append_csv_row(color_name, sample)
 
-    def _log_event(self, message: str, badge_class: str) -> None:
-        self.events.insert(
-            0,
-            {
-                "timestamp": self._timestamp_label(),
-                "message": message,
-                "badge_class": badge_class,
-            },
-        )
-        del self.events[6:]
+        should_stop = False
+        with self._lock:
+            if not self._capture_active or self._selected_color != color_name:
+                return
+
+            self._sample_count += 1
+            self._last_sample = sample
+            self._status_message = (
+                f"Gathering {color_name} samples ({self._sample_count}/{self._target_samples})."
+            )
+            self._updated_at = self._timestamp_label()
+            should_stop = self._sample_count >= self._target_samples
+            if should_stop:
+                self._capture_active = False
+                self._status_message = (
+                    f"Captured {self._target_samples} {color_name} samples. Stopping MCU capture."
+                )
+
+        if should_stop:
+            stop_thread = Thread(
+                target=self._finish_capture_after_target,
+                name="BridgeStopCapture",
+                daemon=True,
+            )
+            stop_thread.start()
+
+    def _finish_capture_after_target(self) -> None:
+        try:
+            self._call_bridge(BRIDGE_STOP_METHOD)
+            with self._lock:
+                color_name = self._selected_color or "selected"
+                self._status_message = (
+                    f"Capture complete for {color_name}. {self._target_samples} samples saved."
+                )
+                self._updated_at = self._timestamp_label()
+        except RuntimeError as error:
+            self._set_bridge_error(str(error))
+
+    def _register_bridge_handler(self) -> None:
+        try:
+            Bridge.provide(BRIDGE_SAMPLE_METHOD, self.handle_color_sample)
+            self._refresh_sensor_ready()
+            with self._lock:
+                self._bridge_connected = True
+                self._bridge_last_error = None
+                if not self._capture_active:
+                    self._status_message = "Bridge connected. Select a color to start gathering."
+                self._updated_at = self._timestamp_label()
+            logger.info("Registered Bridge handler for %s",
+                        BRIDGE_SAMPLE_METHOD)
+        except Exception as error:
+            self._set_bridge_error(
+                f"Failed to register bridge handler: {error}")
+
+    def _refresh_sensor_ready(self) -> None:
+        try:
+            sensor_ready = bool(self._call_bridge(BRIDGE_SENSOR_READY_METHOD))
+        except RuntimeError as error:
+            self._set_bridge_error(str(error))
+            return
+
+        with self._lock:
+            self._sensor_ready = sensor_ready
+            self._updated_at = self._timestamp_label()
+
+    def _call_bridge(self, method_name: str, *params: object) -> object:
+        try:
+            return Bridge.call(method_name, *params, timeout=3)
+        except Exception as error:
+            raise RuntimeError(
+                f"Bridge call '{method_name}' failed: {error}") from error
+
+    def _append_csv_row(self, color_name: str, sample: list[int]) -> None:
+        with self._csv_lock:
+            with self._data_file.open("a", newline="", encoding="utf-8") as csv_file:
+                writer = csv.writer(csv_file)
+                writer.writerow([color_name, *sample])
+
+    def _ensure_csv_header(self) -> None:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with self._csv_lock:
+            needs_header = not self._data_file.exists() or self._data_file.stat().st_size == 0
+            if not needs_header:
+                return
+
+            with self._data_file.open("a", newline="", encoding="utf-8") as csv_file:
+                writer = csv.writer(csv_file)
+                writer.writerow(
+                    ["color_name", *[f"channel{index}" for index in range(1, 11)]])
+
+    def _badge_for_color(self, color_name: str | None) -> str:
+        if color_name is None:
+            return "text-bg-secondary"
+        return COLOR_BADGES.get(color_name, "text-bg-secondary")
+
+    def _set_bridge_error(self, message: str) -> None:
+        logger.error(message)
+        with self._lock:
+            self._bridge_last_error = message
+            self._bridge_connected = False
+            self._sensor_ready = False
+            self._status_message = message
+            self._updated_at = self._timestamp_label()
 
     def _timestamp_label(self) -> str:
-        return datetime.now(UTC).strftime("%H:%M:%S UTC")
+        return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")

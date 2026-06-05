@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-shell mb-4 mb-lg-5">
+    <div class="row g-4 align-items-center">
+        <div class="col-lg-8">
+            <span class="eyebrow">Standalone calibration workflow</span>
+            <h1 class="display-5 mb-3">Capture AS7341 samples from the Uno Q and build the calibration CSV.</h1>
+            <p class="lead text-body-secondary mb-0">
+                The Uno Q streams 10 projected AS7341 channels through RouterBridge. This app labels each sample with the selected ball color and stops automatically after 100 samples.
+            </p>
+        </div>
+        <div class="col-lg-4">
+            <div class="status-card h-100">
+                <div class="small text-uppercase text-body-secondary mb-2">Bridge status</div>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="status-dot {% if status.bridge_connected %}status-dot-live{% else %}status-dot-offline{% endif %}" data-bridge-dot></span>
+                    <strong data-field="bridge-label">{% if status.bridge_connected %}Connected{% else %}Waiting for router{% endif %}</strong>
+                </div>
+                <div class="small text-body-secondary" data-field="sensor-label">
+                    {% if status.sensor_ready %}AS7341 detected on Wire1.{% else %}AS7341 not ready yet.{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4">
+    <div class="col-12 col-xl-5">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+                    <div>
+                        <div class="small text-uppercase text-body-secondary mb-2">Capture control</div>
+                        <h2 class="h4 mb-1">Start a 100-sample session</h2>
+                        <p class="text-body-secondary mb-0">Choose the ball color currently placed in front of the sensor.</p>
+                    </div>
+                    <span class="badge rounded-pill {{ status.selected_color_badge }}" data-field="selected-color-badge">
+                        {{ status.selected_color or "none" }}
+                    </span>
+                </div>
+
+                <form class="vstack gap-3" data-gather-form>
+                    <div>
+                        <label for="colorSelect" class="form-label fw-semibold">Ball color</label>
+                        <select id="colorSelect" class="form-select form-select-lg" name="color" data-color-select>
+                            {% for color in status.available_colors %}
+                            <option value="{{ color }}" {% if color == status.selected_color %}selected{% endif %}>{{ color|capitalize }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="d-grid gap-2 d-sm-flex">
+                        <button type="submit" class="btn btn-danger btn-lg flex-grow-1" data-start-button>Start gathering</button>
+                        <button type="button" class="btn btn-outline-secondary btn-lg flex-grow-1" data-stop-button {% if not status.capture_active %}disabled{% endif %}>Stop</button>
+                    </div>
+                </form>
+
+                <div class="mt-4 pt-3 border-top">
+                    <div class="small text-uppercase text-body-secondary mb-2">Output file</div>
+                    <code class="csv-path" data-field="csv-path">{{ status.csv_path }}</code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body p-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                    <div>
+                        <div class="small text-uppercase text-body-secondary mb-2">Session progress</div>
+                        <h2 class="h4 mb-1">Capture status</h2>
+                        <p class="text-body-secondary mb-0" data-field="status-message">{{ status.status_message }}</p>
+                    </div>
+                    <div class="text-end">
+                        <div class="display-6 fw-semibold mb-0"><span data-field="sample-count">{{ status.sample_count }}</span>/<span data-field="target-samples">{{ status.target_samples }}</span></div>
+                        <div class="small text-body-secondary">samples captured</div>
+                    </div>
+                </div>
+
+                <div class="progress progress-shell mb-4" role="progressbar" aria-label="Capture progress" aria-valuemin="0" aria-valuemax="{{ status.target_samples }}" aria-valuenow="{{ status.sample_count }}">
+                    <div class="progress-bar bg-danger" style="width: {{ (status.sample_count / status.target_samples * 100) if status.target_samples else 0 }}%" data-field="progress-bar"></div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="metric-card h-100">
+                            <div class="small text-uppercase text-body-secondary mb-2">Latest sample</div>
+                            <div class="sample-preview" data-field="last-sample">{% if status.last_sample %}{{ status.last_sample|join(', ') }}{% else %}No sample received yet.{% endif %}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="metric-card h-100">
+                            <div class="small text-uppercase text-body-secondary mb-2">Last update</div>
+                            <div class="fw-semibold" data-field="updated-at">{{ status.updated_at }}</div>
+                            <div class="small text-body-secondary mt-3" data-field="bridge-error">{{ status.bridge_error or "No bridge errors." }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

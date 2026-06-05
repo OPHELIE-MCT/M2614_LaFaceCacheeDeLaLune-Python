@@ -1,0 +1,71 @@
+body {
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at top left, rgba(220, 38, 38, 0.14), transparent 35%),
+        radial-gradient(circle at bottom right, rgba(30, 64, 175, 0.12), transparent 32%),
+        linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+}
+
+.hero-shell,
+.status-card,
+.metric-card,
+.card {
+    border-radius: 1.25rem;
+}
+
+.hero-shell {
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 1rem 3rem rgba(15, 23, 42, 0.08);
+}
+
+.eyebrow {
+    display: inline-block;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #b91c1c;
+    font-weight: 700;
+}
+
+.status-card,
+.metric-card {
+    padding: 1.25rem;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.progress-shell {
+    height: 1rem;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.2);
+}
+
+.sample-preview,
+.csv-path {
+    word-break: break-word;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 999px;
+}
+
+.status-dot-live {
+    background: #16a34a;
+    box-shadow: 0 0 0 0.35rem rgba(22, 163, 74, 0.18);
+}
+
+.status-dot-offline {
+    background: #64748b;
+    box-shadow: 0 0 0 0.35rem rgba(100, 116, 139, 0.14);
+}
+
+@media (max-width: 767.98px) {
+    .hero-shell {
+        padding: 1.5rem;
+    }
+}
