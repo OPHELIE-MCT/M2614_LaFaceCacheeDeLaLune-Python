@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock, Thread
@@ -8,16 +9,22 @@ from threading import RLock, Thread
 from bridge import Bridge
 from logger import Logger
 
+from .centroid_analysis import run_centroid_analysis
+
 from .config import (
+    ANALYSIS_DIR,
+    ARDUINO_RESET_COMMAND,
     BRIDGE_SAMPLE_METHOD,
     BRIDGE_SENSOR_READY_METHOD,
     BRIDGE_START_METHOD,
     BRIDGE_STOP_METHOD,
     CAPTURE_COLORS,
     CAPTURE_TARGET_SAMPLES,
+    CSV_HEADER,
     COLOR_BADGES,
     DATA_DIR,
     DATA_FILE,
+    GENERATED_STATIC_DIR,
 )
 
 
@@ -41,6 +48,14 @@ class CaptureStore:
         self._bridge_connected = False
         self._bridge_last_error: str | None = None
         self._sensor_ready = False
+        self._analysis_message = "No centroid analysis has been run yet."
+        self._analysis_error: str | None = None
+        self._analysis_cpp_code = ""
+        self._analysis_plot_links: list[dict[str, str]] = []
+        self._analysis_unknown_threshold: float | None = None
+        self._analysis_silhouette_score: float | None = None
+        self._analysis_sample_count = 0
+        self._analysis_class_sizes: dict[str, int] = {}
 
         bridge_thread = Thread(
             target=self._register_bridge_handler,
@@ -65,9 +80,21 @@ class CaptureStore:
                 "bridge_connected": self._bridge_connected,
                 "bridge_error": self._bridge_last_error,
                 "sensor_ready": self._sensor_ready,
+                "analysis_message": self._analysis_message,
+                "analysis_error": self._analysis_error,
+                "analysis_cpp_code": self._analysis_cpp_code,
+                "analysis_plot_links": list(self._analysis_plot_links),
+                "analysis_unknown_threshold": self._analysis_unknown_threshold,
+                "analysis_silhouette_score": self._analysis_silhouette_score,
+                "analysis_sample_count": self._analysis_sample_count,
+                "analysis_class_sizes": dict(self._analysis_class_sizes),
                 "updated_at": self._updated_at,
             }
             return payload
+
+    def poll_status(self) -> dict[str, object]:
+        self._refresh_sensor_ready()
+        return self.status_payload()
 
     def health_payload(self) -> dict[str, object]:
         status = self.status_payload()
@@ -103,6 +130,7 @@ class CaptureStore:
             self._capture_active = True
             self._sample_count = 0
             self._last_sample = []
+            self._clear_analysis_results_locked()
             self._status_message = f"Gathering {normalized_color} samples (0/{self._target_samples})."
             self._updated_at = self._timestamp_label()
             return self.status_payload()
@@ -168,6 +196,100 @@ class CaptureStore:
             )
             stop_thread.start()
 
+    def reset_csv(self) -> dict[str, object]:
+        with self._lock:
+            if self._capture_active:
+                raise ValueError(
+                    "Cannot reset the CSV while a gathering session is active.")
+
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with self._csv_lock:
+            with self._data_file.open("w", newline="", encoding="utf-8") as csv_file:
+                writer = csv.writer(csv_file)
+                writer.writerow(CSV_HEADER)
+
+        with self._lock:
+            self._sample_count = 0
+            self._last_sample = []
+            self._clear_analysis_results_locked()
+            self._status_message = "The calibration CSV has been reset."
+            self._updated_at = self._timestamp_label()
+            return self.status_payload()
+
+    def csv_file_path(self) -> Path:
+        if not self._data_file.exists():
+            raise ValueError("No calibration CSV exists yet.")
+        return self._data_file
+
+    def run_analysis(self) -> dict[str, object]:
+        with self._lock:
+            if self._capture_active:
+                raise ValueError(
+                    "Stop the current gathering session before running centroid analysis.")
+
+        ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
+        result = run_centroid_analysis(self._data_file, GENERATED_STATIC_DIR)
+
+        with self._lock:
+            self._analysis_error = None
+            self._analysis_cpp_code = str(result["cpp_code"])
+            self._analysis_plot_links = list(result["plot_links"])
+            self._analysis_unknown_threshold = float(
+                result["unknown_threshold"])
+            silhouette_score = result["silhouette_score"]
+            self._analysis_silhouette_score = (
+                None if silhouette_score is None else float(silhouette_score)
+            )
+            self._analysis_sample_count = int(result["sample_count"])
+            self._analysis_class_sizes = dict(result["class_sizes"])
+            self._analysis_message = (
+                f"Centroid analysis complete. {self._analysis_sample_count} samples processed."
+            )
+            self._status_message = self._analysis_message
+            self._updated_at = self._timestamp_label()
+            return self.status_payload()
+
+    def reset_arduino(self) -> dict[str, object]:
+        with self._lock:
+            capture_was_active = self._capture_active
+
+        if capture_was_active:
+            try:
+                self._call_bridge(BRIDGE_STOP_METHOD)
+            except RuntimeError:
+                logger.warning(
+                    "Bridge stop failed while preparing Arduino reset.")
+            with self._lock:
+                self._capture_active = False
+                self._status_message = "Capture stopped before resetting the Arduino."
+
+        try:
+            completed = subprocess.run(
+                ARDUINO_RESET_COMMAND,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            raise RuntimeError(
+                "The 'arduino-reset' command is not available on this system.") from error
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(
+                "The 'arduino-reset' command timed out.") from error
+
+        if completed.returncode != 0:
+            stderr = completed.stderr.strip()
+            stdout = completed.stdout.strip()
+            detail = stderr or stdout or f"exit code {completed.returncode}"
+            raise RuntimeError(f"The 'arduino-reset' command failed: {detail}")
+
+        self._refresh_sensor_ready()
+        with self._lock:
+            self._status_message = "Arduino reset command completed."
+            self._updated_at = self._timestamp_label()
+            return self.status_payload()
+
     def _finish_capture_after_target(self) -> None:
         try:
             self._call_bridge(BRIDGE_STOP_METHOD)
@@ -204,6 +326,8 @@ class CaptureStore:
             return
 
         with self._lock:
+            self._bridge_connected = True
+            self._bridge_last_error = None
             self._sensor_ready = sensor_ready
             self._updated_at = self._timestamp_label()
 
@@ -229,8 +353,17 @@ class CaptureStore:
 
             with self._data_file.open("a", newline="", encoding="utf-8") as csv_file:
                 writer = csv.writer(csv_file)
-                writer.writerow(
-                    ["color_name", *[f"channel{index}" for index in range(1, 11)]])
+                writer.writerow(CSV_HEADER)
+
+    def _clear_analysis_results_locked(self) -> None:
+        self._analysis_message = "No centroid analysis has been run yet."
+        self._analysis_error = None
+        self._analysis_cpp_code = ""
+        self._analysis_plot_links = []
+        self._analysis_unknown_threshold = None
+        self._analysis_silhouette_score = None
+        self._analysis_sample_count = 0
+        self._analysis_class_sizes = {}
 
     def _badge_for_color(self, color_name: str | None) -> str:
         if color_name is None:

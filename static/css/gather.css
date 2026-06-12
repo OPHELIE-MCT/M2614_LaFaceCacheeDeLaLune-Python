@@ -47,6 +47,35 @@ body {
     word-break: break-word;
 }
 
+.action-group {
+    width: 100%;
+}
+
+.analysis-code {
+    min-height: 20rem;
+    margin-bottom: 0;
+    padding: 1rem;
+    overflow-x: auto;
+    border-radius: 1rem;
+    background: #111827;
+    color: #f3f4f6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.plot-links {
+    padding-left: 1.25rem;
+}
+
+.plot-links a {
+    color: #b91c1c;
+    text-decoration: none;
+}
+
+.plot-links a:hover {
+    text-decoration: underline;
+}
+
 .status-dot {
     display: inline-block;
     width: 0.85rem;

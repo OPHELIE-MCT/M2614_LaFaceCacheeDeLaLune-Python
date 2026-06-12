@@ -2,6 +2,9 @@
     const STATUS_ENDPOINT = "/api/gather/status";
     const START_ENDPOINT = "/api/gather/start";
     const STOP_ENDPOINT = "/api/gather/stop";
+    const RESET_CSV_ENDPOINT = "/api/gather/csv/reset";
+    const RUN_ANALYSIS_ENDPOINT = "/api/gather/analysis/run";
+    const RESET_ARDUINO_ENDPOINT = "/api/gather/device/reset";
     const REFRESH_INTERVAL_MS = 1000;
 
     let toastInstance;
@@ -14,14 +17,44 @@
         updateText('[data-field="updated-at"]', payload.updated_at);
         updateText('[data-field="bridge-error"]', payload.bridge_error || "No bridge errors.");
         updateText('[data-field="bridge-label"]', payload.bridge_connected ? "Connected" : "Waiting for router");
-        updateText('[data-field="sensor-label"]', payload.sensor_ready ? "AS7341 detected on Wire1." : "AS7341 not ready yet.");
+        updateText(
+            '[data-field="sensor-label"]',
+            payload.sensor_ready
+                ? "AS7341 detected on Wire1. Calibration mode is available."
+                : "AS7341 disconnected. The robot can keep running its normal firmware mode.",
+        );
         updateText('[data-field="selected-color-badge"]', payload.selected_color || "none");
+        updateText('[data-field="analysis-message"]', payload.analysis_message || "No centroid analysis has been run yet.");
+        updateText('[data-field="analysis-error"]', payload.analysis_error || "");
+        updateText(
+            '[data-field="analysis-cpp-code"]',
+            payload.analysis_cpp_code || "Run centroid analysis to generate the C++ array.",
+        );
+        updateText(
+            '[data-field="analysis-summary"]',
+            payload.analysis_sample_count
+                ? `${payload.analysis_sample_count} samples processed.`
+                : "Run centroid analysis to save plots locally on the Uno Q SBC.",
+        );
+        updateText(
+            '[data-field="analysis-threshold"]',
+            typeof payload.analysis_unknown_threshold === "number"
+                ? `Unknown threshold: ${payload.analysis_unknown_threshold.toFixed(8)}`
+                : "Unknown threshold unavailable.",
+        );
+        updateText(
+            '[data-field="analysis-silhouette"]',
+            typeof payload.analysis_silhouette_score === "number"
+                ? `Silhouette score: ${payload.analysis_silhouette_score.toFixed(3)}`
+                : "Silhouette score unavailable.",
+        );
         updateText(
             '[data-field="last-sample"]',
             payload.last_sample && payload.last_sample.length > 0
                 ? payload.last_sample.join(", ")
                 : "No sample received yet.",
         );
+        updatePlotLinks(payload.analysis_plot_links || []);
 
         document.querySelectorAll("[data-bridge-dot]").forEach((element) => {
             element.classList.toggle("status-dot-live", payload.bridge_connected);
@@ -76,6 +109,18 @@
         await postJson(STOP_ENDPOINT, {});
     }
 
+    async function resetCsv() {
+        await postJson(RESET_CSV_ENDPOINT, {});
+    }
+
+    async function runAnalysis() {
+        await postJson(RUN_ANALYSIS_ENDPOINT, {});
+    }
+
+    async function resetArduino() {
+        await postJson(RESET_ARDUINO_ENDPOINT, {});
+    }
+
     async function postJson(url, payload) {
         const response = await fetch(url, {
             method: "POST",
@@ -124,6 +169,40 @@
                 }
             });
         });
+
+        document.querySelectorAll("[data-reset-csv-button]").forEach((button) => {
+            button.addEventListener("click", async function () {
+                if (!window.confirm("Reset the calibration CSV and erase all captured samples?")) {
+                    return;
+                }
+
+                try {
+                    await resetCsv();
+                } catch (error) {
+                    showToast(error.message, "danger");
+                }
+            });
+        });
+
+        document.querySelectorAll("[data-run-analysis-button]").forEach((button) => {
+            button.addEventListener("click", async function () {
+                try {
+                    await runAnalysis();
+                } catch (error) {
+                    showToast(error.message, "danger");
+                }
+            });
+        });
+
+        document.querySelectorAll("[data-reset-arduino-button]").forEach((button) => {
+            button.addEventListener("click", async function () {
+                try {
+                    await resetArduino();
+                } catch (error) {
+                    showToast(error.message, "danger");
+                }
+            });
+        });
     }
 
     function showToast(message, variant) {
@@ -145,6 +224,30 @@
     function updateText(selector, value) {
         document.querySelectorAll(selector).forEach((element) => {
             element.textContent = value;
+        });
+    }
+
+    function updatePlotLinks(plotLinks) {
+        document.querySelectorAll('[data-field="analysis-plot-links"]').forEach((element) => {
+            element.innerHTML = "";
+
+            if (!plotLinks.length) {
+                const item = document.createElement("li");
+                item.textContent = "No plots generated yet.";
+                element.appendChild(item);
+                return;
+            }
+
+            plotLinks.forEach((plot) => {
+                const item = document.createElement("li");
+                const link = document.createElement("a");
+                link.href = plot.href;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                link.textContent = plot.label;
+                item.appendChild(link);
+                element.appendChild(item);
+            });
         });
     }
 

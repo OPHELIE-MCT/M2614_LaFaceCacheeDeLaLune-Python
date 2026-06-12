@@ -24,4 +24,13 @@ The app listens on `0.0.0.0:8000` by default. The output CSV is written to `data
 - receive `color_sensor.sample` notifications from the Uno Q sketch through RouterBridge
 - stop automatically after 100 saved samples
 
+## All-in-one calibration workflow
+
+- reset the local CSV from the web UI after a confirmation prompt
+- download the current CSV directly from the Uno Q SBC
+- run the centroid analysis locally on the Uno Q SBC without Jupyter
+- save generated plots locally and expose clickable links in the UI
+- display the paste-ready C++ centroid array and unknown threshold
+- trigger `arduino-reset` from the UI when the MCU must be restarted
+
 This repo is meant to be used together with the Arduino repo for capture and the `ball-analyzer` repo for recalculating classifier centroids.
