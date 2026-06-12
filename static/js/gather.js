@@ -8,6 +8,7 @@
     const REFRESH_INTERVAL_MS = 1000;
 
     let toastInstance;
+    let analysisRequestInFlight = false;
 
     function updateStatus(payload, options) {
         const shouldUpdateAnalysisCode = options && options.updateAnalysisCode;
@@ -59,6 +60,7 @@
                 : "No sample received yet.",
         );
         updatePlotLinks(payload.analysis_plot_links || []);
+        setAnalysisRunning(Boolean(payload.analysis_running) || analysisRequestInFlight);
 
         document.querySelectorAll("[data-bridge-dot]").forEach((element) => {
             element.classList.toggle("status-dot-live", payload.bridge_connected);
@@ -118,7 +120,14 @@
     }
 
     async function runAnalysis() {
-        await postJson(RUN_ANALYSIS_ENDPOINT, {}, { updateAnalysisCode: true });
+        analysisRequestInFlight = true;
+        setAnalysisRunning(true);
+        try {
+            await postJson(RUN_ANALYSIS_ENDPOINT, {}, { updateAnalysisCode: true });
+        } finally {
+            analysisRequestInFlight = false;
+            setAnalysisRunning(false);
+        }
     }
 
     async function resetArduino() {
@@ -161,6 +170,21 @@
         } catch (error) {
             showToast(error.message || "Copy to clipboard failed.", "danger");
         }
+    }
+
+    function setAnalysisRunning(isRunning) {
+        document.querySelectorAll("[data-run-analysis-button]").forEach((button) => {
+            button.disabled = isRunning;
+        });
+
+        document.querySelectorAll("[data-analysis-spinner]").forEach((spinner) => {
+            spinner.classList.toggle("d-none", !isRunning);
+        });
+
+        updateText(
+            "[data-analysis-button-label]",
+            isRunning ? "Analyzing..." : "Run centroid analysis",
+        );
     }
 
     async function writeClipboardText(text) {

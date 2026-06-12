@@ -6,6 +6,7 @@ STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
 DATA_DIR = BASE_DIR / "data"
 ANALYSIS_DIR = DATA_DIR / "analysis"
+ANALYSIS_RESULT_FILE = ANALYSIS_DIR / "last_centroid_analysis.json"
 GENERATED_STATIC_DIR = STATIC_DIR / "generated" / "analysis"
 DATA_FILE = DATA_DIR / "color_sensor_samples.csv"
 CSV_HEADER = ("color_name", *[f"channel{index}" for index in range(1, 11)])

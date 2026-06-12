@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +14,7 @@ from .centroid_analysis import run_centroid_analysis
 
 from .config import (
     ANALYSIS_DIR,
+    ANALYSIS_RESULT_FILE,
     ARDUINO_RESET_COMMAND,
     BRIDGE_SAMPLE_METHOD,
     BRIDGE_SENSOR_READY_METHOD,
@@ -50,12 +52,15 @@ class CaptureStore:
         self._sensor_ready = False
         self._analysis_message = "No centroid analysis has been run yet."
         self._analysis_error: str | None = None
+        self._analysis_running = False
         self._analysis_cpp_code = ""
         self._analysis_plot_links: list[dict[str, str]] = []
         self._analysis_unknown_threshold: float | None = None
         self._analysis_silhouette_score: float | None = None
         self._analysis_sample_count = 0
         self._analysis_class_sizes: dict[str, int] = {}
+        self._analysis_result_file = ANALYSIS_RESULT_FILE
+        self._load_analysis_results()
 
         bridge_thread = Thread(
             target=self._register_bridge_handler,
@@ -82,6 +87,7 @@ class CaptureStore:
                 "sensor_ready": self._sensor_ready,
                 "analysis_message": self._analysis_message,
                 "analysis_error": self._analysis_error,
+                "analysis_running": self._analysis_running,
                 "analysis_cpp_code": self._analysis_cpp_code,
                 "analysis_plot_links": list(self._analysis_plot_links),
                 "analysis_unknown_threshold": self._analysis_unknown_threshold,
@@ -226,11 +232,28 @@ class CaptureStore:
             if self._capture_active:
                 raise ValueError(
                     "Stop the current gathering session before running centroid analysis.")
+            if self._analysis_running:
+                raise ValueError("Centroid analysis is already running.")
+            self._analysis_running = True
+            self._analysis_error = None
+            self._analysis_message = "Centroid analysis is running..."
+            self._status_message = self._analysis_message
+            self._updated_at = self._timestamp_label()
 
         ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
-        result = run_centroid_analysis(self._data_file, GENERATED_STATIC_DIR)
+        try:
+            result = run_centroid_analysis(self._data_file, GENERATED_STATIC_DIR)
+        except Exception as error:
+            with self._lock:
+                self._analysis_running = False
+                self._analysis_error = str(error)
+                self._analysis_message = "Centroid analysis failed."
+                self._status_message = self._analysis_message
+                self._updated_at = self._timestamp_label()
+            raise
 
         with self._lock:
+            self._analysis_running = False
             self._analysis_error = None
             self._analysis_cpp_code = str(result["cpp_code"])
             self._analysis_plot_links = list(result["plot_links"])
@@ -247,6 +270,7 @@ class CaptureStore:
             )
             self._status_message = self._analysis_message
             self._updated_at = self._timestamp_label()
+            self._save_analysis_results_locked()
             return self.status_payload()
 
     def reset_arduino(self) -> dict[str, object]:
@@ -358,12 +382,77 @@ class CaptureStore:
     def _clear_analysis_results_locked(self) -> None:
         self._analysis_message = "No centroid analysis has been run yet."
         self._analysis_error = None
+        self._analysis_running = False
         self._analysis_cpp_code = ""
         self._analysis_plot_links = []
         self._analysis_unknown_threshold = None
         self._analysis_silhouette_score = None
         self._analysis_sample_count = 0
         self._analysis_class_sizes = {}
+        self._delete_saved_analysis_results_locked()
+
+    def _load_analysis_results(self) -> None:
+        if not self._analysis_result_file.exists():
+            return
+
+        try:
+            with self._analysis_result_file.open("r", encoding="utf-8") as results_file:
+                payload = json.load(results_file)
+        except (OSError, json.JSONDecodeError) as error:
+            logger.warning("Failed to load saved centroid analysis results: %s", error)
+            return
+
+        try:
+            self._analysis_cpp_code = str(payload.get("cpp_code") or "")
+            self._analysis_plot_links = [
+                {"label": str(plot["label"]), "href": str(plot["href"])}
+                for plot in payload.get("plot_links", [])
+                if "label" in plot and "href" in plot
+            ]
+            unknown_threshold = payload.get("unknown_threshold")
+            self._analysis_unknown_threshold = (
+                None if unknown_threshold is None else float(unknown_threshold)
+            )
+            silhouette_score = payload.get("silhouette_score")
+            self._analysis_silhouette_score = (
+                None if silhouette_score is None else float(silhouette_score)
+            )
+            self._analysis_sample_count = int(payload.get("sample_count") or 0)
+            self._analysis_class_sizes = {
+                str(label): int(count)
+                for label, count in dict(payload.get("class_sizes") or {}).items()
+            }
+            saved_at = str(payload.get("saved_at") or self._timestamp_label())
+            self._updated_at = saved_at
+            self._analysis_message = (
+                f"Loaded saved centroid analysis. {self._analysis_sample_count} samples processed."
+            )
+        except (TypeError, ValueError, KeyError) as error:
+            logger.warning("Saved centroid analysis results are invalid: %s", error)
+
+    def _save_analysis_results_locked(self) -> None:
+        payload = {
+            "cpp_code": self._analysis_cpp_code,
+            "plot_links": self._analysis_plot_links,
+            "unknown_threshold": self._analysis_unknown_threshold,
+            "silhouette_score": self._analysis_silhouette_score,
+            "sample_count": self._analysis_sample_count,
+            "class_sizes": self._analysis_class_sizes,
+            "saved_at": self._updated_at,
+        }
+        try:
+            self._analysis_result_file.parent.mkdir(parents=True, exist_ok=True)
+            with self._analysis_result_file.open("w", encoding="utf-8") as results_file:
+                json.dump(payload, results_file, indent=2)
+                results_file.write("\n")
+        except OSError as error:
+            logger.warning("Failed to save centroid analysis results: %s", error)
+
+    def _delete_saved_analysis_results_locked(self) -> None:
+        try:
+            self._analysis_result_file.unlink(missing_ok=True)
+        except OSError as error:
+            logger.warning("Failed to delete saved centroid analysis results: %s", error)
 
     def _badge_for_color(self, color_name: str | None) -> str:
         if color_name is None:

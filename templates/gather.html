@@ -132,8 +132,16 @@
               type="button"
               class="btn btn-outline-dark"
               data-run-analysis-button
+              {% if status.analysis_running %}disabled{% endif %}
             >
-              Run centroid analysis
+              <span
+                class="spinner-border spinner-border-sm me-2 {% if not status.analysis_running %}d-none{% endif %}"
+                aria-hidden="true"
+                data-analysis-spinner
+              ></span>
+              <span data-analysis-button-label>
+                {% if status.analysis_running %}Analyzing...{% else %}Run centroid analysis{% endif %}
+              </span>
             </button>
             <button
               type="button"
@@ -230,7 +238,9 @@
         <div class="small text-uppercase text-body-secondary mb-2">
           Classifier constants
         </div>
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+        <div
+          class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1"
+        >
           <h2 class="h4 mb-0">Paste-ready C++ output</h2>
           <button
             type="button"
