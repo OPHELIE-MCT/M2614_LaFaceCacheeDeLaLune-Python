@@ -9,7 +9,9 @@
 
     let toastInstance;
 
-    function updateStatus(payload) {
+    function updateStatus(payload, options) {
+        const shouldUpdateAnalysisCode = options && options.updateAnalysisCode;
+
         updateText('[data-field="status-message"]', payload.status_message);
         updateText('[data-field="sample-count"]', payload.sample_count);
         updateText('[data-field="target-samples"]', payload.target_samples);
@@ -26,10 +28,12 @@
         updateText('[data-field="selected-color-badge"]', payload.selected_color || "none");
         updateText('[data-field="analysis-message"]', payload.analysis_message || "No centroid analysis has been run yet.");
         updateText('[data-field="analysis-error"]', payload.analysis_error || "");
-        updateText(
-            '[data-field="analysis-cpp-code"]',
-            payload.analysis_cpp_code || "Run centroid analysis to generate the C++ array.",
-        );
+        if (shouldUpdateAnalysisCode) {
+            updateText(
+                '[data-field="analysis-cpp-code"]',
+                payload.analysis_cpp_code || "Run centroid analysis to generate the C++ array.",
+            );
+        }
         updateText(
             '[data-field="analysis-summary"]',
             payload.analysis_sample_count
@@ -95,7 +99,7 @@
             }
 
             const payload = await response.json();
-            updateStatus(payload);
+            updateStatus(payload, { updateAnalysisCode: false });
         } catch (error) {
             showToast(error.message, "danger");
         }
@@ -114,14 +118,14 @@
     }
 
     async function runAnalysis() {
-        await postJson(RUN_ANALYSIS_ENDPOINT, {});
+        await postJson(RUN_ANALYSIS_ENDPOINT, {}, { updateAnalysisCode: true });
     }
 
     async function resetArduino() {
         await postJson(RESET_ARDUINO_ENDPOINT, {});
     }
 
-    async function postJson(url, payload) {
+    async function postJson(url, payload, statusOptions) {
         const response = await fetch(url, {
             method: "POST",
             headers: {
@@ -139,8 +143,49 @@
         }
 
         const result = await response.json();
-        updateStatus(result.status);
+        updateStatus(result.status, statusOptions || { updateAnalysisCode: true });
         showToast(result.message, "success");
+    }
+
+    async function copyAnalysisCode() {
+        const codeElement = document.querySelector('[data-field="analysis-cpp-code"]');
+        const codeText = codeElement ? codeElement.textContent.trim() : "";
+        if (!codeText) {
+            showToast("No C++ code available to copy.", "warning");
+            return;
+        }
+
+        try {
+            await writeClipboardText(codeText);
+            showToast("C++ code copied to clipboard.", "success");
+        } catch (error) {
+            showToast(error.message || "Copy to clipboard failed.", "danger");
+        }
+    }
+
+    async function writeClipboardText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.setAttribute("readonly", "");
+        textArea.style.position = "fixed";
+        textArea.style.top = "-9999px";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+
+        try {
+            const copied = document.execCommand("copy");
+            if (!copied) {
+                throw new Error("Copy to clipboard failed.");
+            }
+        } finally {
+            document.body.removeChild(textArea);
+        }
     }
 
     function bindEvents() {
@@ -202,6 +247,10 @@
                     showToast(error.message, "danger");
                 }
             });
+        });
+
+        document.querySelectorAll("[data-copy-analysis-code-button]").forEach((button) => {
+            button.addEventListener("click", copyAnalysisCode);
         });
     }
 
