@@ -10,8 +10,6 @@ from threading import RLock, Thread
 from bridge import Bridge
 from logger import Logger
 
-from .centroid_analysis import run_centroid_analysis
-
 from .config import (
     ANALYSIS_DIR,
     ANALYSIS_RESULT_FILE,
@@ -242,7 +240,19 @@ class CaptureStore:
 
         ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
         try:
+            from .centroid_analysis import run_centroid_analysis
             result = run_centroid_analysis(self._data_file, GENERATED_STATIC_DIR)
+        except (ImportError, OSError) as error:
+            with self._lock:
+                self._analysis_running = False
+                self._analysis_error = str(error)
+                self._analysis_message = "Centroid analysis dependencies are unavailable."
+                self._status_message = self._analysis_message
+                self._updated_at = self._timestamp_label()
+            raise RuntimeError(
+                "Centroid analysis dependencies could not be loaded. "
+                "Install a compatible scipy/scikit-learn build for this platform."
+            ) from error
         except Exception as error:
             with self._lock:
                 self._analysis_running = False
