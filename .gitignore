@@ -10,5 +10,6 @@ wheels/
 .venv
 
 # Runtime calibration outputs
+docs/
 static/generated/
 data/analysis/
