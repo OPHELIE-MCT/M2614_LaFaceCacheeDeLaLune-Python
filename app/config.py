@@ -37,8 +37,3 @@ COLOR_BADGES = {
     "blue": "text-bg-info",
     "pink": "text-bg-secondary",
 }
-
-
-DOOM_PAGE_PATH = "/doom"
-DOOM_PAGE_TITLE = "DOOM sur l'Arduino UNO Q"
-DOOM_BUNDLE_STATIC_PATH = "vendor/doom/doom-shareware.jsdos"

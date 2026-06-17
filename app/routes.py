@@ -2,9 +2,6 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from .config import DOOM_BUNDLE_STATIC_PATH, DOOM_PAGE_PATH, DOOM_PAGE_TITLE
-
-
 router = APIRouter()
 
 
@@ -29,17 +26,26 @@ async def gather_page(request: Request) -> HTMLResponse:
     )
 
 
-@router.get(DOOM_PAGE_PATH, response_class=HTMLResponse)
+@router.get("/doom", response_class=HTMLResponse)
 async def doom_page(request: Request) -> HTMLResponse:
     context: dict[str, object] = {
         "request": request,
-        "page_title": DOOM_PAGE_TITLE,
-        "doom_bundle_static_path": DOOM_BUNDLE_STATIC_PATH,
+        "page_title":  "DOOM sur l'Arduino UNO Q",
+        "doom_bundle_static_path": "vendor/doom/doom-shareware.jsdos",
     }
     return request.app.state.templates.TemplateResponse(
         request=request,
         name="doom.html",
         context=context,
+    )
+
+
+@router.get("/minecraft", response_class=HTMLResponse)
+async def minecraft_page(request: Request) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(
+        request=request,
+        name="minecraft.html",
+        context={},
     )
 
 

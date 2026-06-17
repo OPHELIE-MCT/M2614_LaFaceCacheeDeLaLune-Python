@@ -36,6 +36,7 @@ class CaptureStore:
     """Hold the shared state for the color-sensor calibration capture app."""
 
     def __init__(self) -> None:
+        self._bridge_supported = platform.system() == "Linux"
         self._lock = RLock()
         self._csv_lock = RLock()
         self._data_file = DATA_FILE
@@ -61,13 +62,17 @@ class CaptureStore:
         self._analysis_result_file = ANALYSIS_RESULT_FILE
         self._load_analysis_results()
 
-        if platform.system() == "Linux":
+        if self._bridge_supported:
             bridge_thread = Thread(
                 target=self._register_bridge_handler,
                 name="BridgeRegister",
                 daemon=True,
             )
             bridge_thread.start()
+        else:
+            self._status_message = (
+                "Bridge functions are unavailable on this platform. Run the app on the Uno Q Linux SBC."
+            )
 
     def status_payload(self) -> dict[str, object]:
         with self._lock:
@@ -99,6 +104,9 @@ class CaptureStore:
             return payload
 
     def poll_status(self) -> dict[str, object]:
+        if not self._bridge_supported:
+            return self.status_payload()
+
         self._refresh_sensor_ready()
         return self.status_payload()
 
@@ -243,7 +251,8 @@ class CaptureStore:
         ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
         try:
             from .centroid_analysis import run_centroid_analysis
-            result = run_centroid_analysis(self._data_file, GENERATED_STATIC_DIR)
+            result = run_centroid_analysis(
+                self._data_file, GENERATED_STATIC_DIR)
         except (ImportError, OSError) as error:
             with self._lock:
                 self._analysis_running = False
@@ -355,6 +364,14 @@ class CaptureStore:
                 f"Failed to register bridge handler: {error}")
 
     def _refresh_sensor_ready(self) -> None:
+        if not self._bridge_supported:
+            with self._lock:
+                self._bridge_connected = False
+                self._sensor_ready = False
+                self._bridge_last_error = None
+                self._updated_at = self._timestamp_label()
+            return
+
         try:
             sensor_ready = bool(self._call_bridge(BRIDGE_SENSOR_READY_METHOD))
         except RuntimeError as error:
@@ -368,6 +385,11 @@ class CaptureStore:
             self._updated_at = self._timestamp_label()
 
     def _call_bridge(self, method_name: str, *params: object) -> object:
+        if not self._bridge_supported:
+            raise RuntimeError(
+                "Bridge is unavailable on this platform. Run the app on the Uno Q Linux SBC."
+            )
+
         try:
             return Bridge.call(method_name, *params, timeout=3)
         except Exception as error:
@@ -411,7 +433,8 @@ class CaptureStore:
             with self._analysis_result_file.open("r", encoding="utf-8") as results_file:
                 payload = json.load(results_file)
         except (OSError, json.JSONDecodeError) as error:
-            logger.warning("Failed to load saved centroid analysis results: %s", error)
+            logger.warning(
+                "Failed to load saved centroid analysis results: %s", error)
             return
 
         try:
@@ -440,7 +463,8 @@ class CaptureStore:
                 f"Loaded saved centroid analysis. {self._analysis_sample_count} samples processed."
             )
         except (TypeError, ValueError, KeyError) as error:
-            logger.warning("Saved centroid analysis results are invalid: %s", error)
+            logger.warning(
+                "Saved centroid analysis results are invalid: %s", error)
 
     def _save_analysis_results_locked(self) -> None:
         payload = {
@@ -453,18 +477,21 @@ class CaptureStore:
             "saved_at": self._updated_at,
         }
         try:
-            self._analysis_result_file.parent.mkdir(parents=True, exist_ok=True)
+            self._analysis_result_file.parent.mkdir(
+                parents=True, exist_ok=True)
             with self._analysis_result_file.open("w", encoding="utf-8") as results_file:
                 json.dump(payload, results_file, indent=2)
                 results_file.write("\n")
         except OSError as error:
-            logger.warning("Failed to save centroid analysis results: %s", error)
+            logger.warning(
+                "Failed to save centroid analysis results: %s", error)
 
     def _delete_saved_analysis_results_locked(self) -> None:
         try:
             self._analysis_result_file.unlink(missing_ok=True)
         except OSError as error:
-            logger.warning("Failed to delete saved centroid analysis results: %s", error)
+            logger.warning(
+                "Failed to delete saved centroid analysis results: %s", error)
 
     def _badge_for_color(self, color_name: str | None) -> str:
         if color_name is None:
