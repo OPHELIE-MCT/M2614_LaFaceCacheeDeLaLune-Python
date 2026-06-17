@@ -40,7 +40,8 @@
             <label for="colorSelect" class="form-label fw-semibold">Ball color</label>
             <select id="colorSelect" class="form-select form-select-lg" name="color" data-color-select>
               {% for color in status.available_colors %}
-              <option value="{{ color }}" {% if color="" ="status.selected_color" %}selected{% endif %}>{{ color|capitalize }}</option>
+              <!-- prettier-ignore -->
+              <option value="{{ color }}" {% if color == status.selected_color %}selected{% endif %}>{{ color|capitalize }}</option>
               {% endfor %}
             </select>
           </div>

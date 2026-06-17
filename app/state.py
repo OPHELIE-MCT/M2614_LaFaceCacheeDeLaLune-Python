@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import platform
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -60,12 +61,13 @@ class CaptureStore:
         self._analysis_result_file = ANALYSIS_RESULT_FILE
         self._load_analysis_results()
 
-        bridge_thread = Thread(
-            target=self._register_bridge_handler,
-            name="BridgeRegister",
-            daemon=True,
-        )
-        bridge_thread.start()
+        if platform.system() == "Linux":
+            bridge_thread = Thread(
+                target=self._register_bridge_handler,
+                name="BridgeRegister",
+                daemon=True,
+            )
+            bridge_thread.start()
 
     def status_payload(self) -> dict[str, object]:
         with self._lock:
