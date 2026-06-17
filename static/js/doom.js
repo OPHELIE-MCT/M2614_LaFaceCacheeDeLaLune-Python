@@ -8,6 +8,82 @@
         statusElement.dataset.tone = tone;
     }
 
+    const wasdArrowMap = {
+        KeyW: { key: "ArrowUp", code: "ArrowUp", keyCode: 38 },
+        KeyA: { key: "ArrowLeft", code: "ArrowLeft", keyCode: 37 },
+        KeyS: { key: "ArrowDown", code: "ArrowDown", keyCode: 40 },
+        KeyD: { key: "ArrowRight", code: "ArrowRight", keyCode: 39 },
+    };
+
+    function dispatchRemappedKey(originalEvent, mappedKey) {
+        const remappedEvent = new KeyboardEvent(originalEvent.type, {
+            key: mappedKey.key,
+            code: mappedKey.code,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            ctrlKey: originalEvent.ctrlKey,
+            shiftKey: originalEvent.shiftKey,
+            altKey: originalEvent.altKey,
+            metaKey: originalEvent.metaKey,
+            repeat: originalEvent.repeat,
+            location: originalEvent.location,
+        });
+
+        Object.defineProperties(remappedEvent, {
+            keyCode: { value: mappedKey.keyCode, configurable: true },
+            which: { value: mappedKey.keyCode, configurable: true },
+        });
+
+        window.dispatchEvent(remappedEvent);
+    }
+
+    function shouldIgnoreKeyEvent(event) {
+        const target = event.target;
+        const tagName = target && target.tagName ? target.tagName.toLowerCase() : "";
+
+        return (
+            event.altKey ||
+            event.metaKey ||
+            tagName === "input" ||
+            tagName === "textarea" ||
+            tagName === "select" ||
+            Boolean(target && target.isContentEditable)
+        );
+    }
+
+    function installWasdControls() {
+        window.addEventListener(
+            "keydown",
+            function (event) {
+                const mappedKey = wasdArrowMap[event.code];
+                if (!mappedKey || shouldIgnoreKeyEvent(event)) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                dispatchRemappedKey(event, mappedKey);
+            },
+            true,
+        );
+
+        window.addEventListener(
+            "keyup",
+            function (event) {
+                const mappedKey = wasdArrowMap[event.code];
+                if (!mappedKey || shouldIgnoreKeyEvent(event)) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                dispatchRemappedKey(event, mappedKey);
+            },
+            true,
+        );
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
         const playerElement = document.querySelector("[data-doom-player]");
         if (!playerElement) {
@@ -20,7 +96,7 @@
         const dosFactory = globalThis.Dos;
 
         if (typeof dosFactory !== "function") {
-            updateStatus(statusElement, "The js-dos runtime failed to load.", "danger");
+            updateStatus(statusElement, "Le moteur js-dos n'a pas pu se charger.", "danger");
             return;
         }
 
@@ -41,7 +117,8 @@
             });
         }
 
-        updateStatus(statusElement, "Booting DOOM shareware...", "loading");
+        updateStatus(statusElement, "Démarrage de la version shareware de DOOM...", "loading");
+        installWasdControls();
 
         try {
             dosProps = dosFactory(playerElement, {
@@ -60,7 +137,7 @@
                         }
                         updateStatus(
                             statusElement,
-                            "DOOM is ready. Click the game to capture input.",
+                            "DOOM est prêt. Cliquez sur le jeu pour capturer les commandes.",
                             "success",
                         );
                     }
@@ -69,7 +146,7 @@
         } catch (error) {
             updateStatus(
                 statusElement,
-                error instanceof Error ? error.message : "DOOM failed to start.",
+                error instanceof Error ? error.message : "Échec du démarrage de DOOM.",
                 "danger",
             );
         }

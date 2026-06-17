@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 
@@ -40,19 +39,6 @@ COLOR_BADGES = {
 }
 
 
-def _normalize_route_path(raw_path: str) -> str:
-    normalized = raw_path.strip()
-    if not normalized:
-        normalized = "la-face-cachee-de-la-lune"
-    if not normalized.startswith("/"):
-        normalized = f"/{normalized}"
-    if len(normalized) > 1:
-        normalized = normalized.rstrip("/")
-    return normalized or "/la-face-cachee-de-la-lune"
-
-
-DOOM_PAGE_PATH = _normalize_route_path(
-    os.getenv("M2614_DOOM_PATH", "la-face-cachee-de-la-lune")
-)
-DOOM_PAGE_TITLE = "The Hidden Side of the Moon"
+DOOM_PAGE_PATH = "/doom"
+DOOM_PAGE_TITLE = "DOOM sur l'Arduino UNO Q"
 DOOM_BUNDLE_STATIC_PATH = "vendor/doom/doom-shareware.jsdos"
