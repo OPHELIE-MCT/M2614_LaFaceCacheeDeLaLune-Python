@@ -12,6 +12,22 @@
 
     function updateStatus(payload, options) {
         const shouldUpdateAnalysisCode = options && options.updateAnalysisCode;
+        const isCalibrationReady = Boolean(payload.bridge_connected && payload.sensor_ready);
+        const missingParts = [];
+
+        if (!payload.bridge_connected) {
+            missingParts.push("bridge");
+        }
+
+        if (!payload.sensor_ready) {
+            missingParts.push("AS7341 sensor");
+        }
+
+        const validityDetail = isCalibrationReady
+            ? ""
+            : missingParts.length === 2
+                ? "Missing bridge and AS7341 sensor."
+                : `Missing ${missingParts[0]}.`;
 
         updateText('[data-field="status-message"]', payload.status_message);
         updateText('[data-field="sample-count"]', payload.sample_count);
@@ -19,13 +35,8 @@
         updateText('[data-field="csv-path"]', payload.csv_path);
         updateText('[data-field="updated-at"]', payload.updated_at);
         updateText('[data-field="bridge-error"]', payload.bridge_error || "No bridge errors.");
-        updateText('[data-field="bridge-label"]', payload.bridge_connected ? "Connected" : "Waiting for router");
-        updateText(
-            '[data-field="sensor-label"]',
-            payload.sensor_ready
-                ? "AS7341 detected on Wire1. Calibration mode is available."
-                : "AS7341 disconnected. The robot can keep running its normal firmware mode.",
-        );
+        updateText('[data-field="validity-label"]', isCalibrationReady ? "Ready" : "Not ready");
+        updateText('[data-field="validity-detail"]', validityDetail);
         updateText('[data-field="selected-color-badge"]', payload.selected_color || "none");
         updateText('[data-field="analysis-message"]', payload.analysis_message || "No centroid analysis has been run yet.");
         updateText('[data-field="analysis-error"]', payload.analysis_error || "");
@@ -62,9 +73,9 @@
         updatePlotLinks(payload.analysis_plot_links || []);
         setAnalysisRunning(Boolean(payload.analysis_running) || analysisRequestInFlight);
 
-        document.querySelectorAll("[data-bridge-dot]").forEach((element) => {
-            element.classList.toggle("status-dot-live", payload.bridge_connected);
-            element.classList.toggle("status-dot-offline", !payload.bridge_connected);
+        document.querySelectorAll("[data-validity-dot]").forEach((element) => {
+            element.classList.toggle("status-dot-live", isCalibrationReady);
+            element.classList.toggle("status-dot-offline", !isCalibrationReady);
         });
 
         document.querySelectorAll("[data-start-button]").forEach((button) => {

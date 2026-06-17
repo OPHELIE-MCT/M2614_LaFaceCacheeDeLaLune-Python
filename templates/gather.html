@@ -8,14 +8,14 @@
     </div>
     <div class="col-lg-4">
       <div class="status-card h-100">
-        <div class="small text-uppercase text-body-secondary mb-2">Bridge status</div>
+        <div class="small text-uppercase text-body-secondary mb-2">Calibration validity</div>
         <div class="d-flex align-items-center gap-2 mb-2">
-          <span class="status-dot {% if status.bridge_connected and status.sensor_ready %}status-dot-live{% else %}status-dot-offline{% endif %}" data-bridge-dot></span>
-          <strong data-field="bridge-label">{% if status.bridge_connected and status.sensor_ready %}Connected{% else %}Not ready{% endif %}</strong>
+          <span class="status-dot {% if status.bridge_connected and status.sensor_ready %}status-dot-live{% else %}status-dot-offline{% endif %}" data-validity-dot></span>
+          <strong data-field="validity-label">{% if status.bridge_connected and status.sensor_ready %}Ready{% else %}Not ready{% endif %}</strong>
         </div>
-        <div class="small text-body-secondary" data-field="sensor-label">
-          {% if status.bridge_connected and status.sensor_ready %} {% elif not status.bridge_connected and not status.sensor_ready %} Bridge disconnected and AS7341 not detected yet. {% elif not status.bridge_connected %} Bridge
-          disconnected. {% else %} AS7341 not detected yet. {% endif %}
+        <div class="small text-body-secondary" data-field="validity-detail">
+          {% if status.bridge_connected and status.sensor_ready %}{% elif not status.bridge_connected and not status.sensor_ready %} Missing bridge and AS7341 sensor. {% elif not status.bridge_connected %} Missing bridge. {% else %} Missing
+          AS7341 sensor. {% endif %}
         </div>
       </div>
     </div>
