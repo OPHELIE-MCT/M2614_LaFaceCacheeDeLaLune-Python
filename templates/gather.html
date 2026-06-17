@@ -3,33 +3,19 @@
   <div class="row g-4 align-items-center">
     <div class="col-lg-8">
       <span class="eyebrow">Standalone calibration workflow</span>
-      <h1 class="display-5 mb-3">
-        Capture AS7341 samples from the Uno Q and build the calibration CSV.
-      </h1>
-      <p class="lead text-body-secondary mb-0">
-        The Uno Q streams 10 projected AS7341 channels through RouterBridge.
-        This app labels each sample with the selected ball color and stops
-        automatically after 100 samples.
-      </p>
+      <h1 class="display-5 mb-3">Capture AS7341 samples from the Uno Q and build the calibration CSV.</h1>
+      <p class="lead text-body-secondary mb-0">The Uno Q streams 10 projected AS7341 channels through RouterBridge. This app labels each sample with the selected ball color and stops automatically after 100 samples.</p>
     </div>
     <div class="col-lg-4">
       <div class="status-card h-100">
-        <div class="small text-uppercase text-body-secondary mb-2">
-          Bridge status
-        </div>
+        <div class="small text-uppercase text-body-secondary mb-2">Bridge status</div>
         <div class="d-flex align-items-center gap-2 mb-2">
-          <span
-            class="status-dot {% if status.bridge_connected %}status-dot-live{% else %}status-dot-offline{% endif %}"
-            data-bridge-dot
-          ></span>
-          <strong data-field="bridge-label"
-            >{% if status.bridge_connected %}Connected{% else %}Waiting for
-            router{% endif %}</strong
-          >
+          <span class="status-dot {% if status.bridge_connected and status.sensor_ready %}status-dot-live{% else %}status-dot-offline{% endif %}" data-bridge-dot></span>
+          <strong data-field="bridge-label">{% if status.bridge_connected and status.sensor_ready %}Connected{% else %}Not ready{% endif %}</strong>
         </div>
         <div class="small text-body-secondary" data-field="sensor-label">
-          {% if status.sensor_ready %}AS7341 detected on Wire1.{% else %}AS7341
-          not ready yet.{% endif %}
+          {% if status.bridge_connected and status.sensor_ready %} {% elif not status.bridge_connected and not status.sensor_ready %} Bridge disconnected and AS7341 not detected yet. {% elif not status.bridge_connected %} Bridge
+          disconnected. {% else %} AS7341 not detected yet. {% endif %}
         </div>
       </div>
     </div>
@@ -40,116 +26,42 @@
   <div class="col-12 col-xl-5">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body p-4">
-        <div
-          class="d-flex justify-content-between align-items-start gap-3 mb-4"
-        >
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
           <div>
-            <div class="small text-uppercase text-body-secondary mb-2">
-              Capture control
-            </div>
+            <div class="small text-uppercase text-body-secondary mb-2">Capture control</div>
             <h2 class="h4 mb-1">Start a 100-sample session</h2>
-            <p class="text-body-secondary mb-0">
-              Choose the ball color currently placed in front of the sensor.
-            </p>
+            <p class="text-body-secondary mb-0">Choose the ball color currently placed in front of the sensor.</p>
           </div>
-          <span
-            class="badge rounded-pill {{ status.selected_color_badge }}"
-            data-field="selected-color-badge"
-          >
-            {{ status.selected_color or "none" }}
-          </span>
+          <span class="badge rounded-pill {{ status.selected_color_badge }}" data-field="selected-color-badge"> {{ status.selected_color or "none" }} </span>
         </div>
 
         <form class="vstack gap-3" data-gather-form>
           <div>
-            <label for="colorSelect" class="form-label fw-semibold"
-              >Ball color</label
-            >
-            <select
-              id="colorSelect"
-              class="form-select form-select-lg"
-              name="color"
-              data-color-select
-            >
+            <label for="colorSelect" class="form-label fw-semibold">Ball color</label>
+            <select id="colorSelect" class="form-select form-select-lg" name="color" data-color-select>
               {% for color in status.available_colors %}
-              <option
-                value="{{ color }}"
-                {% if color == status.selected_color %}selected{% endif %}
-              >
-                {{ color|capitalize }}
-              </option>
+              <option value="{{ color }}" {% if color="" ="status.selected_color" %}selected{% endif %}>{{ color|capitalize }}</option>
               {% endfor %}
             </select>
           </div>
 
           <div class="d-grid gap-2 d-sm-flex">
-            <button
-              type="submit"
-              class="btn btn-danger btn-lg flex-grow-1"
-              data-start-button
-            >
-              Start gathering
-            </button>
-            <button
-              type="button"
-              class="btn btn-outline-secondary btn-lg flex-grow-1"
-              data-stop-button
-              {%
-              if
-              not
-              status.capture_active
-              %}disabled{%
-              endif
-              %}
-            >
-              Stop
-            </button>
+            <button type="submit" class="btn btn-danger btn-lg flex-grow-1" data-start-button>Start gathering</button>
+            <button type="button" class="btn btn-outline-secondary btn-lg flex-grow-1" data-stop-button {% if not status.capture_active %}disabled{% endif %}>Stop</button>
           </div>
         </form>
 
         <div class="mt-4 pt-3 border-top">
-          <div class="small text-uppercase text-body-secondary mb-2">
-            Output file
-          </div>
-          <code class="csv-path d-block mb-3" data-field="csv-path"
-            >{{ status.csv_path }}</code
-          >
+          <div class="small text-uppercase text-body-secondary mb-2">Output file</div>
+          <code class="csv-path d-block mb-3" data-field="csv-path">{{ status.csv_path }}</code>
           <div class="d-grid gap-2 d-sm-flex action-group">
-            <button
-              type="button"
-              class="btn btn-outline-danger"
-              data-reset-csv-button
-            >
-              Reset CSV
+            <button type="button" class="btn btn-outline-danger" data-reset-csv-button>Reset CSV</button>
+            <a class="btn btn-outline-primary" href="/api/gather/csv/download" data-download-csv-link>Download CSV</a>
+            <button type="button" class="btn btn-outline-dark" data-run-analysis-button {% if status.analysis_running %}disabled{% endif %}>
+              <span class="spinner-border spinner-border-sm me-2 {% if not status.analysis_running %}d-none{% endif %}" aria-hidden="true" data-analysis-spinner></span>
+              <span data-analysis-button-label> {% if status.analysis_running %}Analyzing...{% else %}Run centroid analysis{% endif %} </span>
             </button>
-            <a
-              class="btn btn-outline-primary"
-              href="/api/gather/csv/download"
-              data-download-csv-link
-              >Download CSV</a
-            >
-            <button
-              type="button"
-              class="btn btn-outline-dark"
-              data-run-analysis-button
-              {% if status.analysis_running %}disabled{% endif %}
-            >
-              <span
-                class="spinner-border spinner-border-sm me-2 {% if not status.analysis_running %}d-none{% endif %}"
-                aria-hidden="true"
-                data-analysis-spinner
-              ></span>
-              <span data-analysis-button-label>
-                {% if status.analysis_running %}Analyzing...{% else %}Run centroid analysis{% endif %}
-              </span>
-            </button>
-            <button
-              type="button"
-              class="btn btn-outline-secondary"
-              data-reset-arduino-button
-            >
-              Reset Arduino
-            </button>
+            <button type="button" class="btn btn-outline-secondary" data-reset-arduino-button>Reset Arduino</button>
           </div>
         </div>
       </div>
@@ -159,70 +71,34 @@
   <div class="col-12 col-xl-7">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body p-4">
-        <div
-          class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4"
-        >
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
           <div>
-            <div class="small text-uppercase text-body-secondary mb-2">
-              Session progress
-            </div>
+            <div class="small text-uppercase text-body-secondary mb-2">Session progress</div>
             <h2 class="h4 mb-1">Capture status</h2>
-            <p class="text-body-secondary mb-0" data-field="status-message">
-              {{ status.status_message }}
-            </p>
+            <p class="text-body-secondary mb-0" data-field="status-message">{{ status.status_message }}</p>
           </div>
           <div class="text-end">
-            <div class="display-6 fw-semibold mb-0">
-              <span data-field="sample-count">{{ status.sample_count }}</span
-              >/<span data-field="target-samples"
-                >{{ status.target_samples }}</span
-              >
-            </div>
+            <div class="display-6 fw-semibold mb-0"><span data-field="sample-count">{{ status.sample_count }}</span>/<span data-field="target-samples">{{ status.target_samples }}</span></div>
             <div class="small text-body-secondary">samples captured</div>
           </div>
         </div>
 
-        <div
-          class="progress progress-shell mb-4"
-          role="progressbar"
-          aria-label="Capture progress"
-          aria-valuemin="0"
-          aria-valuemax="{{ status.target_samples }}"
-          aria-valuenow="{{ status.sample_count }}"
-        >
-          <div
-            class="progress-bar bg-danger"
-            style="width: {{ (status.sample_count / status.target_samples * 100) if status.target_samples else 0 }}%"
-            data-field="progress-bar"
-          ></div>
+        <div class="progress progress-shell mb-4" role="progressbar" aria-label="Capture progress" aria-valuemin="0" aria-valuemax="{{ status.target_samples }}" aria-valuenow="{{ status.sample_count }}">
+          <div class="progress-bar bg-danger" style="width: {{ (status.sample_count / status.target_samples * 100) if status.target_samples else 0 }}%" data-field="progress-bar"></div>
         </div>
 
         <div class="row g-3">
           <div class="col-md-6">
             <div class="metric-card h-100">
-              <div class="small text-uppercase text-body-secondary mb-2">
-                Latest sample
-              </div>
-              <div class="sample-preview" data-field="last-sample">
-                {% if status.last_sample %}{{ status.last_sample|join(', ') }}{%
-                else %}No sample received yet.{% endif %}
-              </div>
+              <div class="small text-uppercase text-body-secondary mb-2">Latest sample</div>
+              <div class="sample-preview" data-field="last-sample">{% if status.last_sample %}{{ status.last_sample|join(', ') }}{% else %}No sample received yet.{% endif %}</div>
             </div>
           </div>
           <div class="col-md-6">
             <div class="metric-card h-100">
-              <div class="small text-uppercase text-body-secondary mb-2">
-                Last update
-              </div>
-              <div class="fw-semibold" data-field="updated-at">
-                {{ status.updated_at }}
-              </div>
-              <div
-                class="small text-body-secondary mt-3"
-                data-field="bridge-error"
-              >
-                {{ status.bridge_error or "No bridge errors." }}
-              </div>
+              <div class="small text-uppercase text-body-secondary mb-2">Last update</div>
+              <div class="fw-semibold" data-field="updated-at">{{ status.updated_at }}</div>
+              <div class="small text-body-secondary mt-3" data-field="bridge-error">{{ status.bridge_error or "No bridge errors." }}</div>
             </div>
           </div>
         </div>
@@ -235,30 +111,14 @@
   <div class="col-12 col-xl-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body p-4">
-        <div class="small text-uppercase text-body-secondary mb-2">
-          Classifier constants
-        </div>
-        <div
-          class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1"
-        >
+        <div class="small text-uppercase text-body-secondary mb-2">Classifier constants</div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
           <h2 class="h4 mb-0">Paste-ready C++ output</h2>
-          <button
-            type="button"
-            class="btn btn-outline-primary btn-sm"
-            data-copy-analysis-code-button
-          >
-            Copy to clipboard
-          </button>
+          <button type="button" class="btn btn-outline-primary btn-sm" data-copy-analysis-code-button>Copy to clipboard</button>
         </div>
-        <p class="text-body-secondary mb-3" data-field="analysis-message">
-          {{ status.analysis_message }}
-        </p>
-        <div class="small text-danger mb-3" data-field="analysis-error">
-          {{ status.analysis_error or "" }}
-        </div>
-        <pre class="analysis-code" data-field="analysis-cpp-code">
-{{ status.analysis_cpp_code or "Run centroid analysis to generate the C++ array." }}</pre
-        >
+        <p class="text-body-secondary mb-3" data-field="analysis-message">{{ status.analysis_message }}</p>
+        <div class="small text-danger mb-3" data-field="analysis-error">{{ status.analysis_error or "" }}</div>
+        <pre class="analysis-code" data-field="analysis-cpp-code">{{ status.analysis_cpp_code or "Run centroid analysis to generate the C++ array." }}</pre>
       </div>
     </div>
   </div>
@@ -266,38 +126,21 @@
   <div class="col-12 col-xl-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body p-4">
-        <div class="small text-uppercase text-body-secondary mb-2">
-          Analysis artifacts
-        </div>
+        <div class="small text-uppercase text-body-secondary mb-2">Analysis artifacts</div>
         <h2 class="h4 mb-1">Saved plots and metrics</h2>
         <p class="text-body-secondary mb-3" data-field="analysis-summary">
-          {% if status.analysis_sample_count %} {{ status.analysis_sample_count
-          }} samples processed. {% else %} Run centroid analysis to save plots
-          locally on the Uno Q SBC. {% endif %}
+          {% if status.analysis_sample_count %} {{ status.analysis_sample_count }} samples processed. {% else %} Run centroid analysis to save plots locally on the Uno Q SBC. {% endif %}
         </p>
-        <div
-          class="small text-body-secondary mb-3"
-          data-field="analysis-threshold"
-        >
-          {% if status.analysis_unknown_threshold is not none %} Unknown
-          threshold: {{ "%.8f"|format(status.analysis_unknown_threshold) }} {%
-          else %} Unknown threshold unavailable. {% endif %}
+        <div class="small text-body-secondary mb-3" data-field="analysis-threshold">
+          {% if status.analysis_unknown_threshold is not none %} Unknown threshold: {{ "%.8f"|format(status.analysis_unknown_threshold) }} {% else %} Unknown threshold unavailable. {% endif %}
         </div>
-        <div
-          class="small text-body-secondary mb-3"
-          data-field="analysis-silhouette"
-        >
-          {% if status.analysis_silhouette_score is not none %} Silhouette
-          score: {{ "%.3f"|format(status.analysis_silhouette_score) }} {% else
-          %} Silhouette score unavailable. {% endif %}
+        <div class="small text-body-secondary mb-3" data-field="analysis-silhouette">
+          {% if status.analysis_silhouette_score is not none %} Silhouette score: {{ "%.3f"|format(status.analysis_silhouette_score) }} {% else %} Silhouette score unavailable. {% endif %}
         </div>
         <ul class="plot-links mb-0" data-field="analysis-plot-links">
-          {% if status.analysis_plot_links %} {% for plot in
-          status.analysis_plot_links %}
+          {% if status.analysis_plot_links %} {% for plot in status.analysis_plot_links %}
           <li>
-            <a href="{{ plot.href }}" target="_blank" rel="noopener noreferrer"
-              >{{ plot.label }}</a
-            >
+            <a href="{{ plot.href }}" target="_blank" rel="noopener noreferrer">{{ plot.label }}</a>
           </li>
           {% endfor %} {% else %}
           <li>No plots generated yet.</li>
