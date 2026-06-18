@@ -106,7 +106,7 @@ def build_cpp_code(
     inner_confidence_radius: float,
     outer_confidence_radii: np.ndarray,
 ) -> str:
-    """Build the documented `classification.h` snippet for the trained model."""
+    """Build a complete production-ready `config.h` header for the trained model."""
 
     centroid_rows = [
         "    {" + ", ".join(format_float(value) for value in row) + "}"
@@ -117,6 +117,26 @@ def build_cpp_code(
     )
 
     lines: list[str] = [
+        "#pragma once",
+        "",
+        "#include <stddef.h>",
+        "",
+        "namespace BallClassifier {",
+        "",
+        "/**",
+        " * @brief Number of input features consumed by the color classifier.",
+        f" * @author {HEADER_DOC_AUTHOR}",
+        f" * @date {HEADER_DOC_DATE}",
+        " */",
+        f"constexpr size_t kFeatureCount = {len(FEATURE_NAMES)};",
+        "",
+        "/**",
+        " * @brief Number of known classes handled by the color classifier.",
+        f" * @author {HEADER_DOC_AUTHOR}",
+        f" * @date {HEADER_DOC_DATE}",
+        " */",
+        f"constexpr size_t kClassCount = {len(CLASS_ORDER)};",
+        "",
         "/**",
         " * @brief Canonical class labels aligned with the trained centroid table.",
         f" * @author {HEADER_DOC_AUTHOR}",
@@ -163,9 +183,11 @@ def build_cpp_code(
             " */",
             "constexpr float kOuterConfidenceRadii[kClassCount] = "
             + "{" + outer_radius_values + "};",
+            "",
+            "}  // namespace BallClassifier",
         ]
     )
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def run_centroid_analysis(csv_path: Path, plots_dir: Path) -> dict[str, object]:

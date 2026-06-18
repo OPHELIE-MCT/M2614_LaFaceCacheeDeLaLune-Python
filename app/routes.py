@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -115,6 +115,24 @@ async def run_analysis_api(request: Request) -> dict[str, object]:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
     return {"message": status_payload["analysis_message"], "status": status_payload}
+
+
+@router.get("/api/gather/analysis/download-config-header")
+async def download_config_header_api(request: Request) -> Response:
+    status_payload = request.app.state.store.status_payload()
+    cpp_code = str(status_payload.get("analysis_cpp_code") or "").strip()
+    if not cpp_code:
+        raise HTTPException(
+            status_code=404,
+            detail="No generated config.h is available yet. Run centroid analysis first.",
+        )
+
+    header_content = cpp_code if cpp_code.endswith("\n") else cpp_code + "\n"
+    return Response(
+        content=header_content,
+        media_type="text/x-c++hdr; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=config.h"},
+    )
 
 
 @router.post("/api/gather/device/reset")

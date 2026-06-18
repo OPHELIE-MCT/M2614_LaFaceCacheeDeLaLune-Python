@@ -4,6 +4,7 @@
     const STOP_ENDPOINT = "/api/gather/stop";
     const RESET_CSV_ENDPOINT = "/api/gather/csv/reset";
     const RUN_ANALYSIS_ENDPOINT = "/api/gather/analysis/run";
+    const DOWNLOAD_CONFIG_HEADER_ENDPOINT = "/api/gather/analysis/download-config-header";
     const RESET_ARDUINO_ENDPOINT = "/api/gather/device/reset";
     const SET_AUTONOMOUS_ENDPOINT = "/api/robot/autonomous";
     const REFRESH_INTERVAL_MS = 1000;
@@ -13,6 +14,7 @@
 
     function updateStatus(payload, options) {
         const shouldUpdateAnalysisCode = options && options.updateAnalysisCode;
+        const hasAnalysisCode = Boolean((payload.analysis_cpp_code || "").trim());
         const isCalibrationReady = Boolean(payload.bridge_connected && payload.sensor_ready);
         const missingParts = [];
 
@@ -44,7 +46,7 @@
         if (shouldUpdateAnalysisCode) {
             updateText(
                 '[data-field="analysis-cpp-code"]',
-                payload.analysis_cpp_code || "Run centroid analysis to generate the classification.h snippet.",
+                payload.analysis_cpp_code || "Run centroid analysis to generate the complete config.h header.",
             );
         }
         updateText(
@@ -88,6 +90,10 @@
 
         document.querySelectorAll("[data-stop-button]").forEach((button) => {
             button.disabled = !payload.capture_active;
+        });
+
+        document.querySelectorAll("[data-download-analysis-code-button]").forEach((button) => {
+            button.disabled = !hasAnalysisCode || Boolean(payload.analysis_running) || analysisRequestInFlight;
         });
 
         document.querySelectorAll("[data-field=" + JSON.stringify("selected-color-badge") + "]").forEach((element) => {
@@ -199,15 +205,43 @@
         const codeElement = document.querySelector('[data-field="analysis-cpp-code"]');
         const codeText = codeElement ? codeElement.textContent.trim() : "";
         if (!codeText) {
-            showToast("No C++ code available to copy.", "warning");
+            showToast("No generated config.h header is available to copy.", "warning");
             return;
         }
 
         try {
             await writeClipboardText(codeText);
-            showToast("C++ code copied to clipboard.", "success");
+            showToast("config.h header copied to clipboard.", "success");
         } catch (error) {
             showToast(error.message || "Copy to clipboard failed.", "danger");
+        }
+    }
+
+    async function downloadConfigHeader() {
+        try {
+            const response = await fetch(DOWNLOAD_CONFIG_HEADER_ENDPOINT, {
+                headers: { Accept: "text/x-c++hdr, application/json" },
+            });
+
+            if (!response.ok) {
+                const errorPayload = await response.json().catch(function () {
+                    return { detail: `Request failed with ${response.status}` };
+                });
+                throw new Error(errorPayload.detail || `Request failed with ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const downloadUrl = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = downloadUrl;
+            link.download = "config.h";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(downloadUrl);
+            showToast("config.h downloaded.", "success");
+        } catch (error) {
+            showToast(error.message || "config.h download failed.", "danger");
         }
     }
 
@@ -316,6 +350,10 @@
             button.addEventListener("click", copyAnalysisCode);
         });
 
+        document.querySelectorAll("[data-download-analysis-code-button]").forEach((button) => {
+            button.addEventListener("click", downloadConfigHeader);
+        });
+
         document.querySelectorAll("[data-autonomous-switch]").forEach((switchEl) => {
             switchEl.addEventListener("change", async function () {
                 try {
@@ -356,27 +394,6 @@
 
             if (!plotLinks.length) {
                 const item = document.createElement("li");
-
-    function updateOuterConfidenceRadii(outerConfidenceRadii) {
-        const entries = Object.entries(outerConfidenceRadii);
-
-        document.querySelectorAll('[data-field="analysis-outer-radii"]').forEach((element) => {
-            element.innerHTML = "";
-
-            if (!entries.length) {
-                const item = document.createElement("li");
-                item.textContent = "Outer confidence radii unavailable.";
-                element.appendChild(item);
-                return;
-            }
-
-            entries.forEach(([label, radius]) => {
-                const item = document.createElement("li");
-                item.textContent = `${label}: ${Number(radius).toFixed(8)}`;
-                element.appendChild(item);
-            });
-        });
-    }
                 item.textContent = "No plots generated yet.";
                 element.appendChild(item);
                 return;
