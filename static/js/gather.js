@@ -356,6 +356,27 @@
 
             if (!plotLinks.length) {
                 const item = document.createElement("li");
+
+    function updateOuterConfidenceRadii(outerConfidenceRadii) {
+        const entries = Object.entries(outerConfidenceRadii);
+
+        document.querySelectorAll('[data-field="analysis-outer-radii"]').forEach((element) => {
+            element.innerHTML = "";
+
+            if (!entries.length) {
+                const item = document.createElement("li");
+                item.textContent = "Outer confidence radii unavailable.";
+                element.appendChild(item);
+                return;
+            }
+
+            entries.forEach(([label, radius]) => {
+                const item = document.createElement("li");
+                item.textContent = `${label}: ${Number(radius).toFixed(8)}`;
+                element.appendChild(item);
+            });
+        });
+    }
                 item.textContent = "No plots generated yet.";
                 element.appendChild(item);
                 return;
