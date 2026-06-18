@@ -5,6 +5,7 @@
     const RESET_CSV_ENDPOINT = "/api/gather/csv/reset";
     const RUN_ANALYSIS_ENDPOINT = "/api/gather/analysis/run";
     const RESET_ARDUINO_ENDPOINT = "/api/gather/device/reset";
+    const SET_AUTONOMOUS_ENDPOINT = "/api/robot/autonomous";
     const REFRESH_INTERVAL_MS = 1000;
 
     let toastInstance;
@@ -102,6 +103,26 @@
                 select.value = payload.selected_color;
             }
         });
+
+        const autonomousSupported = Boolean(payload.autonomous_mode_supported);
+        document.querySelectorAll("[data-autonomous-switch]").forEach((switchEl) => {
+            switchEl.disabled = !autonomousSupported;
+            switchEl.checked = Boolean(payload.autonomous_mode_enabled);
+        });
+        updateText(
+            "[data-field=\"autonomous-label\"]",
+            payload.autonomous_mode_enabled ? "Enabled" : "Disabled",
+        );
+        updateText(
+            "[data-field=\"autonomous-detail\"]",
+            autonomousSupported
+                ? "Reflects the runtime state of the Uno Q autonomous fallback flag."
+                : "Bridge unavailable on this platform. Run the app on the Uno Q Linux SBC.",
+        );
+        updateText(
+            "[data-field=\"autonomous-error\"]",
+            payload.autonomous_mode_error || "",
+        );
     }
 
     async function refreshStatus() {
@@ -143,6 +164,10 @@
 
     async function resetArduino() {
         await postJson(RESET_ARDUINO_ENDPOINT, {});
+    }
+
+    async function setAutonomousMode(enabled) {
+        await postJson(SET_AUTONOMOUS_ENDPOINT, { enabled: Boolean(enabled) });
     }
 
     async function postJson(url, payload, statusOptions) {
@@ -286,6 +311,17 @@
 
         document.querySelectorAll("[data-copy-analysis-code-button]").forEach((button) => {
             button.addEventListener("click", copyAnalysisCode);
+        });
+
+        document.querySelectorAll("[data-autonomous-switch]").forEach((switchEl) => {
+            switchEl.addEventListener("change", async function () {
+                try {
+                    await setAutonomousMode(switchEl.checked);
+                } catch (error) {
+                    showToast(error.message, "danger");
+                    refreshStatus();
+                }
+            });
         });
     }
 

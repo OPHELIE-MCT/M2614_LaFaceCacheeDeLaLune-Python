@@ -125,3 +125,27 @@ async def reset_device_api(request: Request) -> dict[str, object]:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
     return {"message": status_payload["status_message"], "status": status_payload}
+
+
+class AutonomousModeRequest(BaseModel):
+    """Payload used to enable or disable the robot autonomous fallback."""
+
+    enabled: bool
+
+
+@router.post("/api/robot/autonomous")
+async def set_autonomous_mode_api(
+    request: Request, payload: AutonomousModeRequest
+) -> dict[str, object]:
+    try:
+        status_payload = request.app.state.store.set_autonomous_mode(
+            payload.enabled)
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+    return {
+        "message": (
+            "Autonomous mode enabled." if payload.enabled else "Autonomous mode disabled."
+        ),
+        "status": status_payload,
+    }

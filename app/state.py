@@ -17,6 +17,8 @@ from .config import (
     ARDUINO_RESET_COMMAND,
     BRIDGE_SAMPLE_METHOD,
     BRIDGE_SENSOR_READY_METHOD,
+    BRIDGE_AUTONOMOUS_GET_METHOD,
+    BRIDGE_AUTONOMOUS_SET_METHOD,
     BRIDGE_START_METHOD,
     BRIDGE_STOP_METHOD,
     CAPTURE_COLORS,
@@ -50,6 +52,8 @@ class CaptureStore:
         self._bridge_connected = False
         self._bridge_last_error: str | None = None
         self._sensor_ready = False
+        self._autonomous_mode_enabled = False
+        self._autonomous_mode_error: str | None = None
         self._analysis_message = "No centroid analysis has been run yet."
         self._analysis_error: str | None = None
         self._analysis_running = False
@@ -90,6 +94,9 @@ class CaptureStore:
                 "bridge_connected": self._bridge_connected,
                 "bridge_error": self._bridge_last_error,
                 "sensor_ready": self._sensor_ready,
+                "autonomous_mode_enabled": self._autonomous_mode_enabled,
+                "autonomous_mode_error": self._autonomous_mode_error,
+                "autonomous_mode_supported": self._bridge_supported,
                 "analysis_message": self._analysis_message,
                 "analysis_error": self._analysis_error,
                 "analysis_running": self._analysis_running,
@@ -108,7 +115,35 @@ class CaptureStore:
             return self.status_payload()
 
         self._refresh_sensor_ready()
+        self._refresh_autonomous_mode()
         return self.status_payload()
+
+    def set_autonomous_mode(self, enabled: bool) -> dict[str, object]:
+        """Toggle the robot autonomous fallback through RouterBridge.
+
+        @param enabled True to enable the autonomous fallback on RC signal loss.
+        @return Updated status payload.
+        @raises RuntimeError when the bridge is unavailable or the call fails.
+        """
+        if not self._bridge_supported:
+            raise RuntimeError(
+                "Bridge is unavailable on this platform. Run the app on the Uno Q Linux SBC."
+            )
+
+        try:
+            self._call_bridge(BRIDGE_AUTONOMOUS_SET_METHOD,
+                              1 if enabled else 0)
+        except RuntimeError as error:
+            with self._lock:
+                self._autonomous_mode_error = str(error)
+                self._updated_at = self._timestamp_label()
+            raise
+
+        with self._lock:
+            self._autonomous_mode_enabled = bool(enabled)
+            self._autonomous_mode_error = None
+            self._updated_at = self._timestamp_label()
+            return self.status_payload()
 
     def health_payload(self) -> dict[str, object]:
         status = self.status_payload()
@@ -382,6 +417,23 @@ class CaptureStore:
             self._bridge_connected = True
             self._bridge_last_error = None
             self._sensor_ready = sensor_ready
+            self._updated_at = self._timestamp_label()
+
+    def _refresh_autonomous_mode(self) -> None:
+        if not self._bridge_supported:
+            return
+
+        try:
+            enabled = bool(self._call_bridge(BRIDGE_AUTONOMOUS_GET_METHOD))
+        except RuntimeError as error:
+            with self._lock:
+                self._autonomous_mode_error = str(error)
+                self._updated_at = self._timestamp_label()
+            return
+
+        with self._lock:
+            self._autonomous_mode_enabled = enabled
+            self._autonomous_mode_error = None
             self._updated_at = self._timestamp_label()
 
     def _call_bridge(self, method_name: str, *params: object) -> object:

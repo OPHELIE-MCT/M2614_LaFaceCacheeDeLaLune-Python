@@ -16,6 +16,8 @@ BRIDGE_SAMPLE_METHOD = "color_sensor.sample"
 BRIDGE_START_METHOD = "color_sensor.capture.start"
 BRIDGE_STOP_METHOD = "color_sensor.capture.stop"
 BRIDGE_SENSOR_READY_METHOD = "color_sensor.sensor.ready"
+BRIDGE_AUTONOMOUS_GET_METHOD = "robot.autonomous.enabled"
+BRIDGE_AUTONOMOUS_SET_METHOD = "robot.autonomous.set_enabled"
 
 CAPTURE_COLORS = (
     "red",
