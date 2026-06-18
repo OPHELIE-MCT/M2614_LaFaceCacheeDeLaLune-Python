@@ -60,6 +60,9 @@ class CaptureStore:
         self._analysis_cpp_code = ""
         self._analysis_plot_links: list[dict[str, str]] = []
         self._analysis_unknown_threshold: float | None = None
+        self._analysis_inner_confidence_radius: float | None = None
+        self._analysis_outer_confidence_radii: dict[str, float] = {}
+        self._analysis_nearest_centroid_distances: dict[str, float] = {}
         self._analysis_silhouette_score: float | None = None
         self._analysis_sample_count = 0
         self._analysis_class_sizes: dict[str, int] = {}
@@ -103,6 +106,9 @@ class CaptureStore:
                 "analysis_cpp_code": self._analysis_cpp_code,
                 "analysis_plot_links": list(self._analysis_plot_links),
                 "analysis_unknown_threshold": self._analysis_unknown_threshold,
+                "analysis_inner_confidence_radius": self._analysis_inner_confidence_radius,
+                "analysis_outer_confidence_radii": dict(self._analysis_outer_confidence_radii),
+                "analysis_nearest_centroid_distances": dict(self._analysis_nearest_centroid_distances),
                 "analysis_silhouette_score": self._analysis_silhouette_score,
                 "analysis_sample_count": self._analysis_sample_count,
                 "analysis_class_sizes": dict(self._analysis_class_sizes),
@@ -315,6 +321,19 @@ class CaptureStore:
             self._analysis_plot_links = list(result["plot_links"])
             self._analysis_unknown_threshold = float(
                 result["unknown_threshold"])
+            inner_confidence_radius = result.get(
+                "inner_confidence_radius", result["unknown_threshold"]
+            )
+            self._analysis_inner_confidence_radius = float(
+                inner_confidence_radius)
+            self._analysis_outer_confidence_radii = {
+                str(label): float(radius)
+                for label, radius in dict(result.get("outer_confidence_radii") or {}).items()
+            }
+            self._analysis_nearest_centroid_distances = {
+                str(label): float(distance)
+                for label, distance in dict(result.get("nearest_centroid_distances") or {}).items()
+            }
             silhouette_score = result["silhouette_score"]
             self._analysis_silhouette_score = (
                 None if silhouette_score is None else float(silhouette_score)
@@ -472,6 +491,9 @@ class CaptureStore:
         self._analysis_cpp_code = ""
         self._analysis_plot_links = []
         self._analysis_unknown_threshold = None
+        self._analysis_inner_confidence_radius = None
+        self._analysis_outer_confidence_radii = {}
+        self._analysis_nearest_centroid_distances = {}
         self._analysis_silhouette_score = None
         self._analysis_sample_count = 0
         self._analysis_class_sizes = {}
@@ -500,6 +522,20 @@ class CaptureStore:
             self._analysis_unknown_threshold = (
                 None if unknown_threshold is None else float(unknown_threshold)
             )
+            inner_confidence_radius = payload.get("inner_confidence_radius")
+            if inner_confidence_radius is None:
+                self._analysis_inner_confidence_radius = self._analysis_unknown_threshold
+            else:
+                self._analysis_inner_confidence_radius = float(
+                    inner_confidence_radius)
+            self._analysis_outer_confidence_radii = {
+                str(label): float(radius)
+                for label, radius in dict(payload.get("outer_confidence_radii") or {}).items()
+            }
+            self._analysis_nearest_centroid_distances = {
+                str(label): float(distance)
+                for label, distance in dict(payload.get("nearest_centroid_distances") or {}).items()
+            }
             silhouette_score = payload.get("silhouette_score")
             self._analysis_silhouette_score = (
                 None if silhouette_score is None else float(silhouette_score)
@@ -523,6 +559,9 @@ class CaptureStore:
             "cpp_code": self._analysis_cpp_code,
             "plot_links": self._analysis_plot_links,
             "unknown_threshold": self._analysis_unknown_threshold,
+            "inner_confidence_radius": self._analysis_inner_confidence_radius,
+            "outer_confidence_radii": self._analysis_outer_confidence_radii,
+            "nearest_centroid_distances": self._analysis_nearest_centroid_distances,
             "silhouette_score": self._analysis_silhouette_score,
             "sample_count": self._analysis_sample_count,
             "class_sizes": self._analysis_class_sizes,

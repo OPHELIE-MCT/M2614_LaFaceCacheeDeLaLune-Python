@@ -28,9 +28,13 @@ CLASS_COLOR_MAP = {
 }
 UNKNOWN_DISTANCE_PERCENTILE = 95
 EXPECTED_HEADER = ["color_name", *FEATURE_NAMES]
+HEADER_DOC_AUTHOR = "David Goletta"
+HEADER_DOC_DATE = "2026-06-18"
 
 
 def load_labeled_samples(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Load and validate the labeled AS7341 calibration CSV."""
+
     if not path.exists():
         raise FileNotFoundError(
             f"Missing calibration CSV at {path}. Capture samples first."
@@ -79,33 +83,94 @@ def load_labeled_samples(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def format_float(value: float) -> str:
+    """Format a floating-point constant for the generated C++ header block."""
+
     return f"{value:.8f}f"
 
 
-def build_cpp_code(centroids: np.ndarray, unknown_threshold: float) -> str:
+def compute_outer_confidence_radii(centroids: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Compute one outer confidence radius per class from centroid spacing."""
+
+    centroid_distances = np.linalg.norm(
+        centroids[:, np.newaxis, :] - centroids[np.newaxis, :, :], axis=2
+    )
+    np.fill_diagonal(centroid_distances, np.inf)
+
+    nearest_centroid_distances = centroid_distances.min(axis=1)
+    outer_confidence_radii = nearest_centroid_distances / 2.0
+    return outer_confidence_radii, nearest_centroid_distances
+
+
+def build_cpp_code(
+    centroids: np.ndarray,
+    inner_confidence_radius: float,
+    outer_confidence_radii: np.ndarray,
+) -> str:
+    """Build the documented `classification.h` snippet for the trained model."""
+
     centroid_rows = [
         "    {" + ", ".join(format_float(value) for value in row) + "}"
         for row in centroids
     ]
+    outer_radius_values = ", ".join(
+        format_float(value) for value in outer_confidence_radii
+    )
 
-    lines: list[str] = ["constexpr const char* kClassNames[kClassCount] = {"]
+    lines: list[str] = [
+        "/**",
+        " * @brief Canonical class labels aligned with the trained centroid table.",
+        f" * @author {HEADER_DOC_AUTHOR}",
+        f" * @date {HEADER_DOC_DATE}",
+        " */",
+        "constexpr const char* kClassNames[kClassCount] = {",
+    ]
     for label in CLASS_ORDER:
         lines.append(f'    "{label}",')
     lines.append("};")
     lines.append("")
-    lines.append(
-        "constexpr float kClassCentroids[kClassCount][kFeatureCount] = {")
+    lines.extend(
+        [
+            "/**",
+            " * @brief Trained normalized centroids for the supported ball colors.",
+            f" * @author {HEADER_DOC_AUTHOR}",
+            f" * @date {HEADER_DOC_DATE}",
+            " *",
+            " * Rows follow `kClassNames` and columns follow the 10-feature AS7341 layout.",
+            " */",
+            "constexpr float kClassCentroids[kClassCount][kFeatureCount] = {",
+        ]
+    )
     for index, row in enumerate(centroid_rows):
         suffix = "," if index < len(centroid_rows) - 1 else ""
         lines.append(f"{row}{suffix}")
     lines.append("};")
     lines.append("")
-    lines.append(
-        f"constexpr float kUnknownThreshold = {unknown_threshold:.8f}f;")
+    lines.extend(
+        [
+            "/**",
+            " * @brief Global inner radius that maps to 100% confidence.",
+            f" * @author {HEADER_DOC_AUTHOR}",
+            f" * @date {HEADER_DOC_DATE}",
+            " */",
+            f"constexpr float kInnerConfidenceRadius = {inner_confidence_radius:.8f}f;",
+            "",
+            "/**",
+            " * @brief Class-specific outer radii where confidence falls to 0%.",
+            f" * @author {HEADER_DOC_AUTHOR}",
+            f" * @date {HEADER_DOC_DATE}",
+            " *",
+            " * Each entry shares the index of the corresponding `kClassNames` centroid.",
+            " */",
+            "constexpr float kOuterConfidenceRadii[kClassCount] = "
+            + "{" + outer_radius_values + "};",
+        ]
+    )
     return "\n".join(lines)
 
 
 def run_centroid_analysis(csv_path: Path, plots_dir: Path) -> dict[str, object]:
+    """Run the production centroid analysis and package the persisted results."""
+
     X_values, labels = load_labeled_samples(csv_path)
     X_norm = normalize(X_values, norm="l2")
     class_to_id = {label: index for index, label in enumerate(CLASS_ORDER)}
@@ -115,8 +180,11 @@ def run_centroid_analysis(csv_path: Path, plots_dir: Path) -> dict[str, object]:
     centroids = np.vstack([X_norm[labels == label].mean(axis=0)
                           for label in CLASS_ORDER])
     assigned_distances = np.linalg.norm(X_norm - centroids[class_ids], axis=1)
-    unknown_threshold = float(np.percentile(
+    inner_confidence_radius = float(np.percentile(
         assigned_distances, UNKNOWN_DISTANCE_PERCENTILE))
+    outer_confidence_radii, nearest_centroid_distances = (
+        compute_outer_confidence_radii(centroids)
+    )
 
     if len(np.unique(class_ids)) > 1 and len(X_norm) > len(CLASS_ORDER):
         silhouette_value = float(silhouette_score(X_norm, class_ids))
@@ -212,11 +280,24 @@ def run_centroid_analysis(csv_path: Path, plots_dir: Path) -> dict[str, object]:
     plot_links.append({"label": "Cosine similarity",
                       "href": "/static/generated/analysis/cosine_similarity.png"})
 
-    cpp_code = build_cpp_code(centroids, unknown_threshold)
+    cpp_code = build_cpp_code(
+        centroids,
+        inner_confidence_radius,
+        outer_confidence_radii,
+    )
     return {
         "cpp_code": cpp_code,
         "plot_links": plot_links,
-        "unknown_threshold": unknown_threshold,
+        "unknown_threshold": inner_confidence_radius,
+        "inner_confidence_radius": inner_confidence_radius,
+        "outer_confidence_radii": {
+            label: float(outer_confidence_radii[index])
+            for index, label in enumerate(CLASS_ORDER)
+        },
+        "nearest_centroid_distances": {
+            label: float(nearest_centroid_distances[index])
+            for index, label in enumerate(CLASS_ORDER)
+        },
         "silhouette_score": None if np.isnan(silhouette_value) else silhouette_value,
         "sample_count": int(len(X_values)),
         "class_sizes": class_sizes,
