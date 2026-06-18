@@ -44,7 +44,7 @@
         if (shouldUpdateAnalysisCode) {
             updateText(
                 '[data-field="analysis-cpp-code"]',
-                payload.analysis_cpp_code || "Run centroid analysis to generate the C++ array.",
+                payload.analysis_cpp_code || "Run centroid analysis to generate the classification.h snippet.",
             );
         }
         updateText(
@@ -55,10 +55,13 @@
         );
         updateText(
             '[data-field="analysis-threshold"]',
-            typeof payload.analysis_unknown_threshold === "number"
-                ? `Unknown threshold: ${payload.analysis_unknown_threshold.toFixed(8)}`
-                : "Unknown threshold unavailable.",
+            typeof payload.analysis_inner_confidence_radius === "number"
+                ? `Inner confidence radius (95th percentile): ${payload.analysis_inner_confidence_radius.toFixed(8)}`
+                : typeof payload.analysis_unknown_threshold === "number"
+                    ? `Inner confidence radius (95th percentile): ${payload.analysis_unknown_threshold.toFixed(8)}`
+                    : "Inner confidence radius unavailable.",
         );
+        updateOuterConfidenceRadii(payload.analysis_outer_confidence_radii || {});
         updateText(
             '[data-field="analysis-silhouette"]',
             typeof payload.analysis_silhouette_score === "number"
@@ -353,6 +356,27 @@
 
             if (!plotLinks.length) {
                 const item = document.createElement("li");
+
+    function updateOuterConfidenceRadii(outerConfidenceRadii) {
+        const entries = Object.entries(outerConfidenceRadii);
+
+        document.querySelectorAll('[data-field="analysis-outer-radii"]').forEach((element) => {
+            element.innerHTML = "";
+
+            if (!entries.length) {
+                const item = document.createElement("li");
+                item.textContent = "Outer confidence radii unavailable.";
+                element.appendChild(item);
+                return;
+            }
+
+            entries.forEach(([label, radius]) => {
+                const item = document.createElement("li");
+                item.textContent = `${label}: ${Number(radius).toFixed(8)}`;
+                element.appendChild(item);
+            });
+        });
+    }
                 item.textContent = "No plots generated yet.";
                 element.appendChild(item);
                 return;

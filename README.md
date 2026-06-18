@@ -116,9 +116,9 @@ Une fois le CSV suffisamment rempli, l'utilisateur peut lancer l'analyse directe
 
 - charge les données labellisées
 - calcule les centroïdes de classes
-- estime un seuil pour les inconnus
+- calcule un rayon interne global au 95e percentile et un rayon externe par classe
 - produit plusieurs graphiques de contrôle
-- génère le code C++ à recopier dans `ball-sorter/classification.cpp`
+- génère le bloc C++ documenté à recopier dans `ball-sorter/classification.h`
 
 ### 4. Réinjection dans le trieur
 
